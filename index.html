@@ -1,0 +1,2331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<title>LedgerLoop — Daily Business Account Book</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0A1931">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LedgerLoop">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<style>
+:root{
+  --bg:#F5F7FA;
+  --surface:#FFFFFF;
+  --surface-2:#EDF1F5;
+  --primary:#0A1931;
+  --primary-dark:#070F1F;
+  --primary-light:#C7D2DC;
+  --gold:#5B6B7D;
+  --gold-light:#E9ECF0;
+  --income:#2F7D4F;
+  --income-light:#E6F1EA;
+  --expense:#A73838;
+  --expense-light:#F8E9E9;
+  --credit-given:#5B6B7D;
+  --credit-given-light:#E9ECF0;
+  --credit-received:#0A1931;
+  --credit-received-light:#EDF1F5;
+  --text:#0A1931;
+  --text-muted:#5B6B7D;
+  --text-faint:#9AA5B1;
+  --border:#E1E6EC;
+  --shadow:0 2px 10px rgba(10,25,49,.08);
+  --shadow-lg:0 14px 34px rgba(10,25,49,.14);
+  --radius:18px;
+  --radius-sm:12px;
+  --font-display:'Fraunces',serif;
+  --font-body:'Inter',system-ui,sans-serif;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+[data-lang="ta"]{ --font-display:'Noto Sans Tamil','Fraunces',serif; --font-body:'Noto Sans Tamil','Inter',system-ui,sans-serif; }
+body.dark{
+  --bg:#070F1F;
+  --surface:#101F38;
+  --surface-2:#16283F;
+  --primary:#C7D2DC;
+  --primary-dark:#8C97A6;
+  --primary-light:#16283F;
+  --gold-light:#16283F;
+  --income-light:#16281D;
+  --expense-light:#2E1B1B;
+  --credit-given-light:#16283F;
+  --credit-received-light:#16283F;
+  --text:#F2F5F8;
+  --text-muted:#A8B4C2;
+  --text-faint:#5B6B7D;
+  --border:#1D3350;
+  --shadow:0 2px 10px rgba(0,0,0,.35);
+  --shadow-lg:0 14px 34px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation;}
+body{margin:0; background:var(--bg); color:var(--text); font-family:var(--font-body); overscroll-behavior-y:none;}
+#root{max-width:480px; margin:0 auto; min-height:100vh; position:relative; background:var(--bg); padding-bottom:calc(84px + var(--safe-bottom));}
+button{font-family:inherit; cursor:pointer;}
+input,select,textarea{font-family:inherit;}
+::-webkit-scrollbar{display:none;}
+.hide-scroll{scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.screen{scroll-behavior:smooth;}
+
+/* HEADER */
+.header{
+  background:linear-gradient(135deg, #070F1F 0%, #0A1931 55%, #2B3F58 100%);
+  color:#fff; padding:18px 18px 60px; position:relative; overflow:hidden;
+}
+.header::after{content:"";position:absolute; right:-40px; top:-40px; width:160px; height:160px; border-radius:50%; background:rgba(255,255,255,.07);}
+.header::before{content:"";position:absolute; left:-30px; bottom:-60px; width:120px; height:120px; border-radius:50%; background:rgba(255,255,255,.06);}
+.header-top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:1;}
+.biz-name{font-family:var(--font-display); font-weight:700; font-size:20px; margin:0;}
+.greeting{font-size:13px; opacity:.85; margin-top:2px;}
+.header-actions{display:flex; gap:8px;}
+.icon-btn{width:38px; height:38px; border-radius:50%; background:rgba(255,255,255,.18); border:none; color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px;}
+.date-pill{display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,.16); padding:6px 12px; border-radius:20px; font-size:12px; margin-top:12px; position:relative; z-index:1;}
+
+/* SUMMARY CARDS - overlapping header */
+.summary-scroll{display:flex; gap:12px; overflow-x:auto; padding:0 18px; margin-top:-42px; position:relative; z-index:2;}
+.summary-card{
+  min-width:132px; background:var(--surface); border-radius:var(--radius); padding:14px; box-shadow:var(--shadow-lg); flex-shrink:0; border:1px solid var(--border);
+}
+.summary-card .label{font-size:11px; color:var(--text-muted); font-weight:600;}
+.summary-card .val{font-family:var(--font-display); font-size:19px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums;}
+.summary-card .dot{width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px;}
+
+/* SECTION */
+.section{padding:20px 18px 4px;}
+.section-title{font-family:var(--font-display); font-size:16px; font-weight:700; margin:0 0 12px;}
+.section-title-row{display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;}
+.link-btn{color:var(--primary); font-size:13px; font-weight:600; background:none; border:none;}
+
+/* QUICK ACTIONS */
+.qa-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.qa-card{border-radius:var(--radius); padding:18px 16px; text-align:left; border:none; display:flex; flex-direction:column; gap:26px; box-shadow:var(--shadow); transition:transform .15s; min-height:104px;}
+.qa-card:active{transform:scale(.96);}
+.qa-icon{width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:28px; background:rgba(255,255,255,.55);}
+.qa-label{font-weight:700; font-size:16px; font-family:var(--font-body); color:var(--text);}
+.qa-in{background:var(--income-light);} .qa-out{background:var(--expense-light);}
+.qa-cg{background:var(--credit-given-light);} .qa-cr{background:var(--credit-received-light);}
+.qa-full{grid-column:span 2; flex-direction:row; align-items:center; justify-content:space-between; background:var(--surface-2);}
+
+/* TX LIST */
+.tx-item{display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);}
+.tx-item:last-child{border-bottom:none;}
+.tx-ico{width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;}
+.tx-mid{flex:1; min-width:0;}
+.tx-title{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.tx-sub{font-size:12px; color:var(--text-muted); margin-top:2px;}
+.tx-amt{font-family:var(--font-display); font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; flex-shrink:0;}
+.empty-state{text-align:center; padding:40px 20px; color:var(--text-muted);}
+.empty-state .em-ico{font-size:40px; margin-bottom:10px;}
+
+/* BOTTOM NAV */
+.bottom-nav{
+  position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:480px;
+  background:var(--surface); border-top:1px solid var(--border); display:flex; padding:8px 4px calc(8px + var(--safe-bottom));
+  z-index:40; box-shadow:0 -4px 16px rgba(0,0,0,.05);
+}
+.nav-btn{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; color:var(--text-faint); font-size:12px; font-weight:700; min-height:56px;}
+.nav-btn.active{color:var(--primary);}
+.nav-ico{font-size:25px;}
+
+/* SCREENS (bottom sheet full pages) */
+.screen{position:fixed; inset:0; z-index:60; background:var(--bg); display:none; max-width:480px; margin:0 auto; overflow-y:auto;}
+.screen.open{display:block; animation:slideUp .25s ease;}
+@keyframes slideUp{from{transform:translateY(24px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+.screen-header{position:sticky; top:0; background:var(--surface); z-index:5; display:flex; align-items:center; gap:12px; padding:16px 16px; border-bottom:1px solid var(--border);}
+.screen-title{font-family:var(--font-display); font-weight:700; font-size:17px; margin:0;}
+.back-btn{width:36px; height:36px; border-radius:50%; border:none; background:var(--surface-2); font-size:16px; display:flex; align-items:center; justify-content:center; color:var(--text);}
+.screen-body{padding:18px 18px 40px;}
+
+/* FORMS */
+.amount-display{text-align:center; padding:20px 0 10px;}
+.amount-display .cur{font-size:22px; font-weight:700; color:var(--text-muted); vertical-align:top;}
+.amount-display .amt{font-family:var(--font-display); font-size:46px; font-weight:700; font-variant-numeric:tabular-nums;}
+.mic-btn{width:36px; height:36px; border-radius:50%; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); font-size:16px; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle; margin-left:10px;}
+.mic-btn.listening{background:var(--expense-light); border-color:var(--expense); animation:micPulse 1s infinite;}
+@keyframes micPulse{0%,100%{opacity:1;} 50%{opacity:.5;}}
+.field{margin-bottom:16px;}
+.field label{display:block; font-size:12px; font-weight:700; color:var(--text-muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:.02em;}
+.field input, .field select, .field textarea{
+  width:100%; padding:13px 14px; border-radius:var(--radius-sm); border:1.5px solid var(--border); background:var(--surface); color:var(--text); font-size:15px; outline:none;
+}
+.field input:focus, .field select:focus, .field textarea:focus{border-color:var(--primary);}
+.chip-row{display:flex; flex-wrap:wrap; gap:8px;}
+.chip{padding:9px 14px; border-radius:20px; border:1.5px solid var(--border); background:var(--surface); font-size:13px; font-weight:600; color:var(--text-muted);}
+.chip.selected{background:var(--primary); border-color:var(--primary); color:#fff;}
+.keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:18px;}
+.key{padding:16px 0; border-radius:14px; background:var(--surface-2); border:none; font-family:var(--font-display); font-size:20px; font-weight:700; color:var(--text);}
+.key:active{background:var(--primary-light);}
+.key.fn{font-size:16px; color:var(--primary);}
+.voice-btn{position:absolute; right:0; top:0; width:40px; height:40px; border-radius:50%; background:var(--primary-light); color:var(--primary); border:none; font-size:16px;}
+.field-wrap{position:relative;}
+.btn-primary{width:100%; padding:15px; border-radius:var(--radius-sm); background:var(--primary); color:#fff; border:none; font-weight:600; font-size:14px; font-family:var(--font-body); letter-spacing:.04em; text-transform:uppercase; box-shadow:var(--shadow);}
+.btn-secondary{width:100%; padding:15px; border-radius:var(--radius-sm); background:var(--surface-2); color:var(--text); border:none; font-weight:600; font-size:14px; margin-top:10px; font-family:var(--font-body); letter-spacing:.04em; text-transform:uppercase;}
+.btn-row{display:flex; gap:10px; margin-top:6px;}
+.btn-row .btn-primary, .btn-row .btn-secondary{margin-top:0;}
+
+/* toast */
+.toast{position:fixed; bottom:calc(90px + var(--safe-bottom)); left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:12px 20px; border-radius:30px; font-size:13px; font-weight:600; z-index:100; box-shadow:var(--shadow-lg); display:flex; align-items:center; gap:8px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(-6px);}
+
+/* misc */
+.pill-tab-row{display:flex; background:var(--surface-2); border-radius:14px; padding:4px; gap:4px; margin-bottom:16px;}
+.pill-tab{flex:1; text-align:center; padding:9px 0; border-radius:11px; border:none; background:none; font-weight:700; font-size:13px; color:var(--text-muted);}
+.pill-tab.active{background:var(--surface); color:var(--primary); box-shadow:var(--shadow);}
+.credit-card{background:var(--surface); border-radius:var(--radius); padding:14px; margin-bottom:12px; box-shadow:var(--shadow); border:1px solid var(--border);}
+.credit-card .cname{font-weight:700; font-family:var(--font-display); font-size:15px;}
+.credit-card .cphone{font-size:12px; color:var(--text-muted);}
+.progress-bar{height:6px; background:var(--surface-2); border-radius:4px; margin:10px 0 6px; overflow:hidden;}
+.progress-fill{height:100%; background:var(--gold);}
+.filter-row{display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; margin-bottom:14px;}
+.filter-chip{padding:8px 14px; border-radius:18px; background:var(--surface-2); border:none; font-size:12px; font-weight:700; color:var(--text-muted); white-space:nowrap; flex-shrink:0;}
+.filter-chip.active{background:var(--primary); color:#fff;}
+.search-box{display:flex; align-items:center; gap:8px; background:var(--surface-2); border-radius:var(--radius-sm); padding:11px 14px; margin-bottom:14px;}
+.search-box input{background:none; border:none; outline:none; flex:1; font-size:14px; color:var(--text);}
+.stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:18px;}
+.stat-box{background:var(--surface); border-radius:var(--radius); padding:14px; border:1px solid var(--border);}
+.stat-box .lbl{font-size:11px; color:var(--text-muted); font-weight:600;}
+.stat-box .v{font-family:var(--font-display); font-size:18px; font-weight:700; margin-top:4px;}
+.range-row{display:flex; gap:8px; margin-bottom:16px;}
+.range-btn{flex:1; padding:10px 0; border-radius:12px; background:var(--surface-2); border:none; font-weight:700; font-size:12px; color:var(--text-muted);}
+.range-btn.active{background:var(--primary); color:#fff;}
+.chart-card{background:var(--surface); border-radius:var(--radius); padding:16px; margin-bottom:16px; border:1px solid var(--border);}
+.chart-card h4{margin:0 0 12px; font-family:var(--font-display); font-size:14px;}
+.profile-row{display:flex; align-items:center; gap:14px; padding:14px; background:var(--surface); border-radius:var(--radius); margin-bottom:10px; border:1px solid var(--border);}
+.avatar{width:56px; height:56px; border-radius:50%; background:var(--primary-light); color:var(--primary); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:22px;}
+.settings-item{display:flex; justify-content:space-between; align-items:center; padding:14px 4px; border-bottom:1px solid var(--border);}
+.settings-item:last-child{border-bottom:none;}
+.settings-label{font-size:14px; font-weight:600; display:flex; align-items:center; gap:10px;}
+.switch{width:44px; height:26px; border-radius:14px; background:var(--surface-2); position:relative; border:none;}
+.switch.on{background:var(--primary);}
+.switch::after{content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; transition:left .15s;}
+.switch.on::after{left:21px;}
+.lang-toggle{display:flex; background:rgba(255,255,255,.18); border-radius:20px; padding:3px;}
+.lang-btn{padding:6px 12px; border-radius:16px; border:none; background:none; font-size:12px; font-weight:700; color:rgba(255,255,255,.85);}
+.lang-btn.active{background:rgba(255,255,255,.3); color:#fff;}
+.lang-toggle-alt{display:flex; background:var(--surface-2); border-radius:20px; padding:3px;}
+.lang-btn-alt{padding:6px 12px; border-radius:16px; border:none; background:none; font-size:12px; font-weight:700; color:var(--text-muted);}
+.lang-btn-alt.active{background:var(--primary); color:#fff;}
+.insight-card{background:linear-gradient(135deg,var(--primary-light),var(--surface)); border-radius:var(--radius); padding:14px; margin-bottom:10px; border:1px solid var(--border); font-size:13px; display:flex; gap:10px;}
+.chip.add-chip{border-style:dashed; color:var(--primary); border-color:var(--primary);}
+.photo-preview{position:relative; width:88px; height:88px; border-radius:14px; overflow:hidden; border:1.5px solid var(--border); margin-top:8px;}
+.photo-preview img{width:100%; height:100%; object-fit:cover;}
+.photo-remove{position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; border:none; font-size:12px; display:flex; align-items:center; justify-content:center;}
+.reminder-banner{display:flex; align-items:center; gap:10px; background:var(--gold-light); border:1px solid var(--gold); border-radius:var(--radius-sm); padding:12px 14px; margin:0 18px 14px; font-size:12px;}
+.reminder-banner button{background:none; border:none; color:var(--primary); font-weight:800; font-size:12px; flex-shrink:0;}
+.action-row-sm{display:flex; gap:8px; margin-top:12px;}
+.action-btn-sm{flex:1; padding:10px; border-radius:12px; background:var(--surface-2); border:none; font-weight:700; font-size:12px; color:var(--text); display:flex; align-items:center; justify-content:center; gap:6px;}
+.payment-hist-item{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px dashed var(--border); font-size:13px;}
+.payment-hist-item:last-child{border-bottom:none;}
+.locked-card{opacity:.45; pointer-events:none; position:relative;}
+.role-badge{font-size:10px; font-weight:800; padding:3px 8px; border-radius:8px; background:var(--primary-light); color:var(--primary); text-transform:uppercase;}
+.cat-manage-row{display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border);}
+.cat-del{background:none; border:none; color:var(--expense); font-size:16px;}
+.notif-banner{position:fixed; top:14px; left:50%; transform:translateX(-50%); max-width:440px; width:92%; background:var(--surface); border-radius:14px; padding:12px 16px; box-shadow:var(--shadow-lg); z-index:110; display:flex; align-items:center; gap:10px; border:1px solid var(--border); font-size:13px;}
+.check-overlay{position:fixed; inset:0; background:rgba(10,20,17,.55); z-index:120; display:none; align-items:center; justify-content:center;}
+.check-overlay.show{display:flex;}
+.check-box{background:var(--surface); border-radius:24px; padding:30px; text-align:center; width:260px; animation:pop .3s ease;}
+@keyframes pop{0%{transform:scale(.7); opacity:0;} 100%{transform:scale(1); opacity:1;}}
+.check-circle{width:64px; height:64px; border-radius:50%; background:var(--income-light); color:var(--income); display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 14px; animation:pulse .5s ease;}
+@keyframes pulse{0%{transform:scale(0);} 60%{transform:scale(1.15);} 100%{transform:scale(1);}}
+.skeleton{background:linear-gradient(90deg,var(--surface-2) 25%,var(--border) 37%,var(--surface-2) 63%); background-size:400% 100%; animation:sk 1.4s ease infinite; border-radius:10px;}
+@keyframes sk{0%{background-position:100% 50%;} 100%{background-position:0 50%;}}
+
+/* LOCK SCREEN */
+.lock-screen{position:fixed; inset:0; z-index:200; background:linear-gradient(160deg,#070F1F,#1F3350); display:flex; flex-direction:column; align-items:center; justify-content:center; color:#fff; max-width:480px; margin:0 auto;}
+.lock-title{font-family:var(--font-display); font-size:18px; font-weight:700; margin-bottom:22px;}
+.lock-dots{display:flex; gap:14px; margin-bottom:30px;}
+.lock-dot{width:16px; height:16px; border-radius:50%; border:2px solid rgba(255,255,255,.6); transition:background .1s;}
+.lock-dot.filled{background:#fff;}
+.lock-keypad{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; width:250px;}
+.lock-key{padding:16px 0; border-radius:50%; background:rgba(255,255,255,.14); border:none; color:#fff; font-family:var(--font-display); font-size:20px; font-weight:700;}
+.lock-key:active{background:rgba(255,255,255,.3);}
+.lock-error{color:#FFD9D6; font-size:12px; margin-top:14px; min-height:16px;}
+
+/* TUTORIAL WALKTHROUGH */
+.tutorial-overlay{position:fixed; inset:0; z-index:300; background:rgba(10,25,49,.55); display:flex; align-items:flex-end; max-width:480px; margin:0 auto;}
+.tutorial-card{position:relative; width:100%; background:var(--surface); border-radius:26px 26px 0 0; padding:32px 24px calc(28px + var(--safe-bottom)); text-align:center; animation:slideUp .25s ease;}
+.tutorial-skip{position:absolute; top:16px; right:16px; background:none; border:none; color:var(--text-faint); font-size:13px; font-weight:700; padding:6px 8px;}
+.tutorial-icon{width:88px; height:88px; border-radius:50%; margin:0 auto 18px; display:flex; align-items:center; justify-content:center; font-size:44px;}
+.tutorial-title{font-family:var(--font-display); font-weight:700; font-size:22px; color:var(--text); margin-bottom:10px;}
+.tutorial-body{font-size:16px; line-height:1.5; color:var(--text-muted); margin-bottom:20px;}
+.tutorial-dots{display:flex; justify-content:center; gap:8px; margin-bottom:20px;}
+.tut-dot{width:8px; height:8px; border-radius:50%; background:var(--border);}
+.tut-dot.active{background:var(--primary); width:22px; border-radius:5px; transition:all .2s;}
+.lock-sub{font-size:12px; opacity:.8; margin-top:-14px; margin-bottom:20px;}
+
+/* BUDGETS */
+.budget-row{padding:12px 0; border-bottom:1px solid var(--border);}
+.budget-row:last-child{border-bottom:none;}
+.budget-row-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:13px; font-weight:600;}
+.budget-input{width:90px; padding:6px 8px; border-radius:8px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); font-size:13px; text-align:right;}
+.budget-progress{height:8px; border-radius:5px; background:var(--surface-2); overflow:hidden;}
+.budget-progress-fill{height:100%; border-radius:5px;}
+.budget-warn{font-size:11px; margin-top:4px;}
+
+/* RECURRING */
+.recurring-card{display:flex; align-items:center; gap:12px; background:var(--surface); border-radius:var(--radius-sm); padding:12px 14px; margin-bottom:10px; border:1px solid var(--border);}
+.recurring-ico{width:36px; height:36px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;}
+.recurring-mid{flex:1; min-width:0;}
+.recurring-title{font-weight:700; font-size:13px;}
+.recurring-sub{font-size:11px; color:var(--text-muted);}
+.recurring-add{padding:8px 14px; border-radius:10px; background:var(--primary); color:#fff; border:none; font-weight:700; font-size:12px; flex-shrink:0;}
+.recur-manage-row{display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--border); font-size:13px;}
+
+/* AUTH SCREENS */
+.auth-screen{position:fixed; inset:0; z-index:150; background:var(--bg); overflow-y:auto; max-width:480px; margin:0 auto;}
+.auth-hero{
+  background:
+    radial-gradient(circle at 85% -10%, rgba(199,210,220,.18), transparent 55%),
+    linear-gradient(160deg, #070F1F 0%, #1F3350 100%);
+  color:#fff; padding:56px 24px 46px; text-align:center; position:relative; overflow:hidden;
+}
+.auth-hero::before{content:"";position:absolute; inset:14px; border:1px solid rgba(199,210,220,.22); border-radius:22px; pointer-events:none;}
+.auth-hero::after{content:"";position:absolute; right:-50px; top:-50px; width:180px; height:180px; border-radius:50%; background:rgba(199,210,220,.10);}
+.auth-logo{
+  width:64px; height:64px; border-radius:50%; margin:0 auto 16px; position:relative; z-index:1;
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Fraunces',serif; font-weight:600; font-size:24px; letter-spacing:.02em; color:var(--gold);
+  background:rgba(255,255,255,.06); border:1.5px solid rgba(199,210,220,.45);
+  box-shadow:0 0 0 5px rgba(199,210,220,.10);
+}
+.auth-title{font-family:'Fraunces',serif; font-weight:600; font-size:24px; position:relative; z-index:1; letter-spacing:.01em;}
+.auth-sub{font-family:'Inter',sans-serif; font-size:11px; opacity:.75; margin-top:6px; position:relative; z-index:1; text-transform:uppercase; letter-spacing:.16em; font-weight:600;}
+.auth-card{background:var(--surface); border-radius:26px 26px 0 0; margin-top:-26px; position:relative; padding:30px 24px 54px; min-height:56vh; box-shadow:0 -12px 30px -18px rgba(0,0,0,.12);}
+.auth-tabs{display:grid; grid-template-columns:1fr 1fr; gap:6px; background:var(--surface-2); border-radius:14px; padding:5px; margin-bottom:22px;}
+.auth-tab{flex:none; text-align:center; padding:12px 4px; border-radius:10px; border:none; background:none; font-family:'Inter',sans-serif; font-weight:700; font-size:14px; letter-spacing:.01em; color:var(--text-muted); position:relative; box-shadow:none; display:flex; align-items:center; justify-content:center; gap:6px;}
+.auth-tab::after{display:none;}
+.auth-tab.active{color:var(--text); background:var(--surface); box-shadow:var(--shadow);}
+.auth-hint{font-size:12px; color:var(--text-muted); margin:-10px 0 16px; line-height:1.4;}
+.auth-divider{display:flex; align-items:center; gap:10px; margin:20px 0; color:var(--text-faint); font-size:11px; text-transform:uppercase; letter-spacing:.12em; font-weight:600;}
+.auth-divider::before, .auth-divider::after{content:""; flex:1; height:1px; background:var(--border);}
+.google-btn{width:100%; padding:14px; border-radius:var(--radius-sm); background:var(--surface); border:1.5px solid var(--border); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; gap:10px; color:var(--text); transition:border-color .2s ease, box-shadow .2s ease;}
+.google-btn:hover{border-color:var(--gold); box-shadow:var(--shadow);}
+.google-g{width:20px; height:20px; border-radius:50%; background:#fff; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px; color:#4285F4;}
+.auth-link{text-align:center; font-size:13px; color:var(--text-muted); margin-top:18px;}
+.auth-link .link-inline{color:var(--gold); font-weight:700; background:none; border:none; font-size:13px;}
+.remember-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text-muted); margin:2px 0 18px;}
+.remember-row input{width:16px; height:16px; accent-color:var(--gold);}
+.demo-otp-banner{background:var(--gold-light); border:1px solid var(--gold); border-radius:12px; padding:10px 14px; font-size:12px; text-align:center; margin-bottom:16px;}
+.auth-error{color:#fff; background:var(--expense); font-size:13px; text-align:center; margin:-4px 0 16px; font-weight:600; padding:10px 12px; border-radius:10px;}
+.back-link{background:none; border:none; color:var(--text-muted); font-size:13px; display:flex; align-items:center; gap:6px; margin-bottom:16px; padding:0;}
+.demo-note{font-size:11px; color:var(--text-faint); text-align:center; margin-top:6px;}
+.auth-card .field{margin-bottom:18px;}
+.auth-card .field label{font-size:13px; text-transform:none; letter-spacing:0; font-weight:700; color:var(--text);}
+.auth-card .field input{padding:15px 16px; font-size:16px; border-radius:14px;}
+.auth-card .field input:focus{border-color:var(--gold); box-shadow:0 0 0 3px rgba(199,154,61,.16);}
+.auth-card .btn-primary{background:linear-gradient(135deg, #0A1931, #2B3F58); letter-spacing:.02em; padding:15px; font-size:16px;}
+.pw-wrap{position:relative;}
+.pw-wrap input{padding-right:52px !important;}
+.pw-toggle{position:absolute; right:6px; top:50%; transform:translateY(-50%); background:none; border:none; font-size:12px; font-weight:700; color:var(--text-muted); padding:8px 10px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div class="toast" id="toast"></div>
+<div class="check-overlay" id="checkOverlay">
+  <div class="check-box">
+    <div class="check-circle">✓</div>
+    <div id="checkMsg" style="font-family:var(--font-display); font-weight:700; font-size:16px;"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   DAILY BUSINESS ACCOUNT BOOK — app logic
+   Data layer uses localStorage today, structured to mirror the
+   target Firestore collections 1:1 (see README notes at bottom)
+   so migrating to real Firebase later is a drop-in swap.
+   ============================================================ */
+
+/* ---------- i18n ---------- */
+const STR = {
+  en:{
+    hi:"Hello", today:"Today", income:"Today's Income", expense:"Today's Expenses", cash:"Cash in Hand",
+    profit:"Today's Profit", pending:"Pending Credit", moneyIn:"Money Came In", moneyOut:"Money Went Out",
+    creditGiven:"Credit Given", creditReceived:"Credit Received", dailySummary:"Daily Summary",
+    recent:"Recent Transactions", seeAll:"See All", quickActions:"Quick Actions",
+    home:"Home", transactions:"Transactions", credit:"Credit", reports:"Reports", profile:"Profile",
+    amount:"Amount", category:"Category", customer:"Customer Name", vendor:"Vendor", notes:"Notes (optional)",
+    save:"Save", saveAdd:"Save & Continue", phone:"Phone Number", date:"Date", noTx:"No transactions yet",
+    noTxSub:"Tap + to add your first entry", search:"Search transactions", all:"All",
+    receiptPhoto:"Add Receipt Photo (optional)", pendingList:"Pending List", remaining:"Remaining",
+    paid:"Paid", recordPayment:"Record Payment", receivedAmt:"Received Amount", balanceRemaining:"Balance Remaining",
+    txCount:"Transactions", closingReport:"Share Daily Closing", businessName:"Business Name", address:"Address",
+    currency:"Currency", theme:"Dark Mode", language:"Language", backup:"Backup Data", restore:"Restore Data",
+    logout:"Logout", insights:"Business Insights", day:"Day", week:"Week", month:"Month", year:"Year",
+    incomeVsExpense:"Income vs Expense", byCategory:"By Category", exportCsv:"Export CSV", saved:"Saved successfully",
+    deleted:"Deleted", undo:"Undo", edit:"Edit", delete:"Delete", who:"Who paid / received", selectCategory:"Select category",
+    fullyPaid:"Fully settled", listenNow:"Listening... speak the amount", speakAmount:"Tap mic and say the amount",
+    given:"Given", received:"Received", welcome:"Welcome back", staff:"Staff", accountant:"Accountant", owner:"Owner",
+    role:"Role", cashShop:"General Store", noCustomers:"No pending credit customers", filterDate:"Date", filterCategory:"Category",
+    editTx:"Edit Entry", addCategory:"Add Category", newCategory:"New category name", call:"Call", remindWA:"Remind on WhatsApp",
+    paymentHistory:"Payment History", noPayments:"No payments recorded yet", pdfExport:"Download PDF", manageCategories:"Manage Categories",
+    removeCategory:"Remove", notifications:"Payment Reminders", notifOn:"You'll get reminders for pending credit",
+    testNotif:"Send Test Notification", notifBlocked:"Notifications are blocked in browser settings", update:"Update",
+    viewOnly:"View only for your role", staffLocked:"Ask the owner to manage credit and reports", photoAdded:"Photo attached",
+    removePhoto:"Remove photo",
+    budgets:"Monthly Budgets", setBudget:"Set a monthly limit per expense category", noBudget:"Not set",
+    overBudget:"Over budget!", nearBudget:"Nearing limit", ofBudget:"of budget",
+    appLock:"App Lock (PIN)", enterPin:"Enter your PIN", createPin:"Create a 4-digit PIN", confirmPin:"Confirm your PIN",
+    wrongPin:"Incorrect PIN, try again", pinMismatch:"PINs don't match, try again", pinSet:"App lock enabled",
+    pinRemoved:"App lock disabled", disablePin:"Enter PIN to disable lock",
+    recurring:"Recurring Bills", dueToday:"Due for this period", addRecurring:"Add Recurring Bill", recurringLabel:"Label (e.g. Shop Rent)",
+    frequency:"Frequency", weekly:"Weekly", monthly:"Monthly", manageRecurring:"Manage Recurring", noRecurring:"No recurring bills set up",
+    added:"Added", tapToAdd:"Tap to add today's entry",
+    signIn:"Login", createAccount:"Create Account", yourName:"Your Name", email:"Email", password:"Password",
+    confirmPassword:"Confirm Password", rememberMe:"Remember me", forgotQ:"Forgot?", resetPassword:"Reset Password",
+    or:"OR", continueGoogle:"Continue with Google", noAccount:"Don't have an account?", haveAccount:"Already have an account?",
+    signUp:"Sign Up", sendOtp:"Send OTP", verifyOtp:"Verify & Continue", resendOtp:"Resend OTP", enterOtp:"4-digit code",
+    demoOtp:"Demo OTP (no SMS gateway connected)", demoResetCode:"Demo reset code", sentTo:"Sent to",
+    enterEmailReset:"Enter your account email", sendResetCode:"Send Reset Code", newPassword:"New Password",
+    updatePassword:"Update Password", back:"Back", welcomeUser:"Welcome", firstOwnerNote:"You'll be set up as the Owner (first account)",
+    phoneOrEmailReq:"Phone or email is required", nameRequired:"Please enter your name", passwordShort:"Password must be at least 4 characters",
+    passwordMismatch:"Passwords do not match", phoneTaken:"This phone number is already registered", emailTaken:"This email is already registered",
+    invalidPhone:"Enter a valid phone number", wrongOtp:"Incorrect OTP", wrongCode:"Incorrect code", wrongCreds:"Incorrect email or password",
+    noAccountEmail:"No account found with this email", passwordUpdated:"Password updated! Please log in.", googleDemoNote:"Demo — connect Firebase for real Google Sign-In",
+    otpSent:"New OTP sent", tagline:"Simple Daily Business Management for Everyone",
+    phoneHint:"We'll text you a 4-digit code to confirm it's you. No password needed.",
+    emailHint:"Enter the email and password you used when you signed up.",
+    showPw:"Show", hidePw:"Hide", advancedSettings:"More Settings", basicNote:"Showing just the essentials",
+    gst:"GST", gstRate:"GST Rate (%)", gstRateHint:"Applied automatically to all money in/out entries", gstCollected:"Today's GST",
+    taxableValue:"Taxable Value", gstAmount:"GST Amount", gstSet:"GST rate updated", enterGstRate:"Enter a valid GST rate (0-28)",
+    tutSkip:"Skip", tutNext:"Next", tutDone:"Start Using App", tutStep1Title:"Money Came In", tutStep1Body:"When you get cash from a sale, tap the GREEN box.",
+    tutStep2Title:"Money Went Out", tutStep2Body:"When you spend money (buy stock, pay rent), tap the RED box.",
+    tutStep3Title:"Credit Given / Received", tutStep3Body:"If someone owes you, or you owe someone — use these two yellow/blue boxes.",
+    tutStep4Title:"Daily Summary", tutStep4Body:"See how much money you made today, anytime, by tapping here.",
+    tutStep5Title:"Bottom Menu", tutStep5Body:"Use these 5 buttons to move around the app. Home is always the ₹ money screen.",
+    replayTutorial:"Show App Tutorial Again",
+  },
+  ta:{
+    hi:"வணக்கம்", today:"இன்று", income:"இன்றைய வருமானம்", expense:"இன்றைய செலவு", cash:"கையிருப்பு பணம்",
+    profit:"இன்றைய லாபம்", pending:"நிலுவை கடன்", moneyIn:"பணம் வந்தது", moneyOut:"பணம் சென்றது",
+    creditGiven:"கடன் கொடுத்தது", creditReceived:"கடன் பெற்றது", dailySummary:"தினசரி சுருக்கம்",
+    recent:"சமீபத்திய பரிவர்த்தனைகள்", seeAll:"அனைத்தையும் காண்க", quickActions:"விரைவு செயல்கள்",
+    home:"முகப்பு", transactions:"பரிவர்த்தனைகள்", credit:"கடன்", reports:"அறிக்கைகள்", profile:"சுயவிவரம்",
+    amount:"தொகை", category:"வகை", customer:"வாடிக்கையாளர் பெயர்", vendor:"விற்பனையாளர்", notes:"குறிப்புகள் (விருப்பம்)",
+    save:"சேமி", saveAdd:"சேமித்து தொடரவும்", phone:"தொலைபேசி எண்", date:"தேதி", noTx:"இன்னும் பரிவர்த்தனை இல்லை",
+    noTxSub:"முதல் பதிவைச் சேர் + ஐ தட்டவும்", search:"பரிவர்த்தனைகளைத் தேடு", all:"அனைத்தும்",
+    receiptPhoto:"ரசீது புகைப்படம் (விருப்பம்)", pendingList:"நிலுவை பட்டியல்", remaining:"மீதம்",
+    paid:"செலுத்தியது", recordPayment:"பணம் பதிவு செய்", receivedAmt:"பெற்ற தொகை", balanceRemaining:"மீதி இருப்பு",
+    txCount:"பரிவர்த்தனைகள்", closingReport:"தினசரி முடிவை பகிர்", businessName:"வணிக பெயர்", address:"முகவரி",
+    currency:"நாணயம்", theme:"இருண்ட பயன்முறை", language:"மொழி", backup:"தரவு காப்பு", restore:"தரவு மீட்டமை",
+    logout:"வெளியேறு", insights:"வணிக நுண்ணறிவு", day:"நாள்", week:"வாரம்", month:"மாதம்", year:"ஆண்டு",
+    incomeVsExpense:"வருமானம் Vs செலவு", byCategory:"வகை வாரியாக", exportCsv:"CSV ஏற்றுமதி", saved:"வெற்றிகரமாக சேமிக்கப்பட்டது",
+    deleted:"நீக்கப்பட்டது", undo:"திரும்பப்பெறு", edit:"திருத்து", delete:"நீக்கு", who:"பணம் கொடுத்தவர் / பெற்றவர்", selectCategory:"வகையைத் தேர்ந்தெடு",
+    fullyPaid:"முழுமையாக தீர்க்கப்பட்டது", listenNow:"கேட்கிறது... தொகையை சொல்லவும்", speakAmount:"மைக்கை தட்டி தொகையைச் சொல்லவும்",
+    given:"கொடுத்தது", received:"பெற்றது", welcome:"மீண்டும் வருக", staff:"பணியாளர்", accountant:"கணக்காளர்", owner:"உரிமையாளர்",
+    role:"பங்கு", cashShop:"பொது கடை", noCustomers:"நிலுவை கடன் வாடிக்கையாளர்கள் இல்லை", filterDate:"தேதி", filterCategory:"வகை",
+    editTx:"பதிவை திருத்து", addCategory:"வகை சேர்", newCategory:"புதிய வகை பெயர்", call:"அழை", remindWA:"WhatsApp நினைவூட்டு",
+    paymentHistory:"பணம் செலுத்திய வரலாறு", noPayments:"இன்னும் பணம் பதிவு இல்லை", pdfExport:"PDF பதிவிறக்கு", manageCategories:"வகைகளை நிர்வகி",
+    removeCategory:"நீக்கு", notifications:"பணம் நினைவூட்டல்கள்", notifOn:"நிலுவை கடனுக்கான நினைவூட்டல்கள் கிடைக்கும்",
+    testNotif:"சோதனை அறிவிப்பு அனுப்பு", notifBlocked:"அறிவிப்புகள் உலாவி அமைப்புகளில் தடுக்கப்பட்டுள்ளன", update:"புதுப்பி",
+    viewOnly:"உங்கள் பங்குக்கு பார்வை மட்டும்", staffLocked:"கடன் மற்றும் அறிக்கைகளை நிர்வகிக்க உரிமையாளரிடம் கேளுங்கள்", photoAdded:"படம் இணைக்கப்பட்டது",
+    removePhoto:"படத்தை நீக்கு",
+    budgets:"மாதாந்திர பட்ஜெட்", setBudget:"ஒரு செலவு வகைக்கு மாத வரம்பை அமைக்கவும்", noBudget:"அமைக்கப்படவில்லை",
+    overBudget:"பட்ஜெட்டை மீறியது!", nearBudget:"வரம்பை நெருங்குகிறது", ofBudget:"பட்ஜெட்டில்",
+    appLock:"ஆப் லாக் (PIN)", enterPin:"உங்கள் PIN ஐ உள்ளிடவும்", createPin:"4 இலக்க PIN உருவாக்கவும்", confirmPin:"PIN ஐ உறுதிப்படுத்தவும்",
+    wrongPin:"தவறான PIN, மீண்டும் முயற்சிக்கவும்", pinMismatch:"PIN பொருந்தவில்லை, மீண்டும் முயற்சிக்கவும்", pinSet:"ஆப் லாக் இயக்கப்பட்டது",
+    pinRemoved:"ஆப் லாக் முடக்கப்பட்டது", disablePin:"லாக்கை முடக்க PIN ஐ உள்ளிடவும்",
+    recurring:"தொடர் பில்கள்", dueToday:"இந்த காலத்திற்கு நிலுவை", addRecurring:"தொடர் பில் சேர்", recurringLabel:"லேபிள் (எ.கா. கடை வாடகை)",
+    frequency:"அதிர்வெண்", weekly:"வாராந்திர", monthly:"மாதாந்திர", manageRecurring:"தொடர் பில்களை நிர்வகி", noRecurring:"தொடர் பில்கள் அமைக்கப்படவில்லை",
+    added:"சேர்க்கப்பட்டது", tapToAdd:"இன்றைய பதிவை சேர்க்க தட்டவும்",
+    signIn:"உள்நுழை", createAccount:"கணக்கை உருவாக்கு", yourName:"உங்கள் பெயர்", email:"மின்னஞ்சல்", password:"கடவுச்சொல்",
+    confirmPassword:"கடவுச்சொல் உறுதி", rememberMe:"என்னை நினைவில் வையுங்கள்", forgotQ:"மறந்துவிட்டீர்களா?", resetPassword:"கடவுச்சொல் மீட்பு",
+    or:"அல்லது", continueGoogle:"Google மூலம் தொடரவும்", noAccount:"கணக்கு இல்லையா?", haveAccount:"ஏற்கனவே கணக்கு உள்ளதா?",
+    signUp:"பதிவு செய்யவும்", sendOtp:"OTP அனுப்பு", verifyOtp:"சரிபார்த்து தொடரவும்", resendOtp:"மீண்டும் அனுப்பு", enterOtp:"4 இலக்க குறியீடு",
+    demoOtp:"டெமோ OTP (SMS இணைக்கப்படவில்லை)", demoResetCode:"டெமோ மீட்பு குறியீடு", sentTo:"அனுப்பப்பட்டது",
+    enterEmailReset:"உங்கள் கணக்கு மின்னஞ்சலை உள்ளிடவும்", sendResetCode:"மீட்பு குறியீடு அனுப்பு", newPassword:"புதிய கடவுச்சொல்",
+    updatePassword:"கடவுச்சொல்லை புதுப்பி", back:"பின்", welcomeUser:"வணக்கம்", firstOwnerNote:"முதல் கணக்கு உரிமையாளராக அமைக்கப்படும்",
+    phoneOrEmailReq:"தொலைபேசி அல்லது மின்னஞ்சல் தேவை", nameRequired:"பெயரை உள்ளிடவும்", passwordShort:"குறைந்தது 4 எழுத்துகள் தேவை",
+    passwordMismatch:"கடவுச்சொற்கள் பொருந்தவில்லை", phoneTaken:"இந்த எண் ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது", emailTaken:"இந்த மின்னஞ்சல் ஏற்கனவே பதிவு செய்யப்பட்டுள்ளது",
+    invalidPhone:"சரியான எண்ணை உள்ளிடவும்", wrongOtp:"தவறான OTP", wrongCode:"தவறான குறியீடு", wrongCreds:"மின்னஞ்சல் அல்லது கடவுச்சொல் தவறு",
+    noAccountEmail:"இந்த மின்னஞ்சலுடன் கணக்கு இல்லை", passwordUpdated:"கடவுச்சொல் புதுப்பிக்கப்பட்டது! உள்நுழையவும்.", googleDemoNote:"டெமோ — உண்மையான Google உள்நுழைவுக்கு Firebase இணைக்கவும்",
+    otpSent:"புதிய OTP அனுப்பப்பட்டது", tagline:"அனைவருக்கும் எளிய வணிக நிர்வாகம்",
+    phoneHint:"நீங்கள் தான் என்பதை உறுதிசெய்ய 4 இலக்க குறியீட்டை SMS ஆக அனுப்புவோம். கடவுச்சொல் தேவையில்லை.",
+    emailHint:"பதிவு செய்யும்போது பயன்படுத்திய மின்னஞ்சல் மற்றும் கடவுச்சொல்லை உள்ளிடவும்.",
+    showPw:"காட்டு", hidePw:"மறை", advancedSettings:"கூடுதல் அமைப்புகள்", basicNote:"அடிப்படை அமைப்புகள் மட்டும் காட்டப்படுகின்றன",
+    gst:"ஜிஎஸ்டி", gstRate:"ஜிஎஸ்டி விகிதம் (%)", gstRateHint:"அனைத்து பணப் பதிவுகளுக்கும் தானாக பயன்படுத்தப்படும்", gstCollected:"இன்றைய ஜிஎஸ்டி",
+    taxableValue:"வரி விதிக்கக்கூடிய மதிப்பு", gstAmount:"ஜிஎஸ்டி தொகை", gstSet:"ஜிஎஸ்டி விகிதம் புதுப்பிக்கப்பட்டது", enterGstRate:"சரியான ஜிஎஸ்டி விகிதத்தை உள்ளிடவும் (0-28)",
+    tutSkip:"தவிர்", tutNext:"அடுத்து", tutDone:"ஆப்பை பயன்படுத்து", tutStep1Title:"பணம் வந்தது", tutStep1Body:"விற்பனையில் பணம் வந்தால், பச்சை பெட்டியை தட்டவும்.",
+    tutStep2Title:"பணம் சென்றது", tutStep2Body:"பொருள் வாங்க, வாடகை கட்ட பணம் செலவழித்தால், சிவப்பு பெட்டியை தட்டவும்.",
+    tutStep3Title:"கடன் கொடுத்தது / பெற்றது", tutStep3Body:"யாராவது உங்களிடம் கடன் வாங்கினால் அல்லது நீங்கள் கடன் வாங்கினால் — இந்த மஞ்சள்/நீலப் பெட்டிகளை பயன்படுத்தவும்.",
+    tutStep4Title:"தினசரி சுருக்கம்", tutStep4Body:"இன்று எவ்வளவு பணம் சம்பாதித்தீர்கள் என்பதை எப்போது வேண்டுமானாலும் இங்கே பார்க்கலாம்.",
+    tutStep5Title:"கீழ் பட்டி", tutStep5Body:"ஆப்பில் நகர இந்த 5 பொத்தான்களை பயன்படுத்தவும். முகப்பு எப்போதும் ₹ பணத் திரை.",
+    replayTutorial:"ஆப் வழிகாட்டியை மீண்டும் காட்டு",
+  }
+};
+let LANG = localStorage.getItem('ll_lang') || 'en';
+function t(key){ return (STR[LANG] && STR[LANG][key]) || STR.en[key] || key; }
+
+/* ---------- Data layer (mirrors Firestore collections) ---------- */
+const DB = {
+  read(key, fallback){ try{ const v = localStorage.getItem('ll_'+key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } },
+  write(key, val){ localStorage.setItem('ll_'+key, JSON.stringify(val)); }
+};
+
+let STATE = {
+  settings: DB.read('settings', {
+    businessName:'My Shop', address:'', phone:'', currency:'₹', dark:false, role:'owner',
+    customCatsIn:[], customCatsOut:[], notifOptIn:false, budgets:{}, pinEnabled:false, pin:null, gstRate:null
+  }),
+  transactions: DB.read('transactions', []), // {id,type:'in'|'out',amount,category,person,notes,date,time,ts,photo}
+  credits: DB.read('credits', []),           // {id,type:'given'|'received',customer,phone,amount,paid,date,notes,ts}
+  payments: DB.read('payments', []),         // {id,creditId,amount,date,ts}
+  recurring: DB.read('recurring', []),       // {id,type,category,label,amount,frequency:'weekly'|'monthly',lastAddedPeriod}
+  users: DB.read('users', []),               // {id,name,phone,email,passHash,role,provider,createdAt}
+  lastDeleted: null,
+};
+// backfill fields for people upgrading from an earlier saved state
+if(!STATE.settings.customCatsIn) STATE.settings.customCatsIn = [];
+if(!STATE.settings.customCatsOut) STATE.settings.customCatsOut = [];
+if(!STATE.settings.budgets) STATE.settings.budgets = {};
+if(typeof STATE.settings.pinEnabled==='undefined') STATE.settings.pinEnabled = false;
+if(typeof STATE.settings.pin==='undefined') STATE.settings.pin = null;
+if(typeof STATE.settings.gstRate==='undefined') STATE.settings.gstRate = null;
+if(!STATE.settings.themeAccent) STATE.settings.themeAccent = 'navy';
+if(typeof STATE.settings.tutorialSeen==='undefined') STATE.settings.tutorialSeen = false;
+if(!STATE.recurring) STATE.recurring = [];
+if(!STATE.users) STATE.users = [];
+
+/* ---------- Theme accent presets (tap-to-change, no code editing needed) ---------- */
+const THEME_PRESETS = {
+  navy:   {label:'Navy & Silver', swatch:'#0A1931', primary:'#0A1931', primaryDark:'#070F1F', primaryLight:'#C7D2DC', gold:'#5B6B7D', goldLight:'#E9ECF0'},
+  ocean:  {label:'Ocean Blue',    swatch:'#1A3D63', primary:'#1A3D63', primaryDark:'#0A1931', primaryLight:'#B3CFE5', gold:'#4A7FA7', goldLight:'#DCE9F5'},
+  emerald:{label:'Emerald',       swatch:'#14532D', primary:'#14532D', primaryDark:'#0B3A1E', primaryLight:'#BFE3CB', gold:'#3C7A52', goldLight:'#E1F2E6'},
+  wine:   {label:'Wine',          swatch:'#5E1B2E', primary:'#5E1B2E', primaryDark:'#3D0F1D', primaryLight:'#E9C9D2', gold:'#8C4457', goldLight:'#F3E1E6'},
+  charcoal:{label:'Charcoal',     swatch:'#1F2328', primary:'#1F2328', primaryDark:'#101317', primaryLight:'#D3D6DA', gold:'#5A6169', goldLight:'#ECEDEF'},
+};
+function applyThemeAccent(){
+  const preset = THEME_PRESETS[STATE.settings.themeAccent] || THEME_PRESETS.navy;
+  const r = document.documentElement.style;
+  r.setProperty('--primary', preset.primary);
+  r.setProperty('--primary-dark', preset.primaryDark);
+  r.setProperty('--primary-light', preset.primaryLight);
+  r.setProperty('--gold', preset.gold);
+  r.setProperty('--gold-light', preset.goldLight);
+  r.setProperty('--credit-given', preset.gold);
+  r.setProperty('--credit-given-light', preset.goldLight);
+  r.setProperty('--credit-received', preset.primary);
+  r.setProperty('--credit-received-light', preset.goldLight);
+}
+
+let APP_UNLOCKED = !STATE.settings.pinEnabled;
+
+/* ---------- Auth session ---------- */
+function simpleHash(str){
+  let hash = 0;
+  for(let i=0;i<str.length;i++){ hash = (hash<<5)-hash+str.charCodeAt(i); hash|=0; }
+  return 'h'+Math.abs(hash).toString(36)+str.length;
+}
+function saveSession(userId, remember){
+  const data = JSON.stringify({userId});
+  if(remember){ localStorage.setItem('ll_session', data); sessionStorage.removeItem('ll_session'); }
+  else { sessionStorage.setItem('ll_session', data); localStorage.removeItem('ll_session'); }
+}
+function loadSession(){
+  try{
+    const raw = localStorage.getItem('ll_session') || sessionStorage.getItem('ll_session');
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function clearSession(){ localStorage.removeItem('ll_session'); sessionStorage.removeItem('ll_session'); }
+
+let CURRENT_USER_ID = null;
+let AUTH_SCREEN = STATE.users.length===0 ? 'signup' : 'login';
+let AUTH_FORM = { tab:'phone', phone:'', email:'', password:'', name:'', remember:true, otp:'', sentOtp:'', role:'staff', error:'' };
+(function bootAuth(){
+  const session = loadSession();
+  if(session && session.userId){
+    const user = STATE.users.find(u=>u.id===session.userId);
+    if(user){ CURRENT_USER_ID = user.id; STATE.settings.role = user.role; }
+  }
+})();
+
+function persist(){
+  DB.write('settings', STATE.settings);
+  DB.write('transactions', STATE.transactions);
+  DB.write('credits', STATE.credits);
+  DB.write('payments', STATE.payments);
+  DB.write('recurring', STATE.recurring);
+  DB.write('users', STATE.users);
+}
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
+function todayStr(){ return new Date().toISOString().slice(0,10); }
+function fmtMoney(n){
+  n = Number(n)||0;
+  return STATE.settings.currency + n.toLocaleString('en-IN', {maximumFractionDigits:0});
+}
+function gstBreakup(amount){
+  // amount is treated as GST-inclusive; splits it into taxable value + GST amount using the configured rate
+  const rate = Number(STATE.settings.gstRate)||0;
+  amount = Number(amount)||0;
+  if(rate<=0) return { rate:0, taxable:amount, gst:0 };
+  const taxable = amount / (1 + rate/100);
+  const gst = amount - taxable;
+  return { rate, taxable, gst };
+}
+function fmtDate(d){
+  const dt = new Date(d);
+  return dt.toLocaleDateString(LANG==='ta'?'ta-IN':'en-IN', {day:'numeric', month:'short'});
+}
+
+/* Categories */
+const CATS_IN_BASE = ['Sales','Service','Other Income'];
+const CATS_OUT_BASE = ['Stock/Purchase','Rent','Electricity','Salary','Transport','Food','Maintenance','Other'];
+function getCatsIn(){ return [...CATS_IN_BASE, ...(STATE.settings.customCatsIn||[])]; }
+function getCatsOut(){ return [...CATS_OUT_BASE, ...(STATE.settings.customCatsOut||[])]; }
+
+/* ---------- Roles & permissions ---------- */
+// owner: full access. staff: can add transactions only. accountant: reports & analytics only (read-only).
+function can(action){
+  const role = STATE.settings.role || 'owner';
+  if(role==='owner') return true;
+  if(role==='staff') return ['addTransaction'].includes(action);
+  if(role==='accountant') return ['viewReports','viewTransactions','viewCredit'].includes(action);
+  return true;
+}
+
+/* ---------- Toast & confirmation ---------- */
+let toastTimer;
+function showToast(msg, actionLabel, actionFn){
+  const el = document.getElementById('toast');
+  el.innerHTML = '<span>'+msg+'</span>' + (actionLabel ? '<button id="toastAction" style="background:none;border:none;color:var(--primary);font-weight:800;font-size:13px;">'+actionLabel+'</button>' : '');
+  el.classList.add('show');
+  if(actionLabel && actionFn){ document.getElementById('toastAction').onclick = ()=>{ actionFn(); el.classList.remove('show'); }; }
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> el.classList.remove('show'), 3500);
+}
+function showCheck(msg){
+  document.getElementById('checkMsg').textContent = msg;
+  const ov = document.getElementById('checkOverlay');
+  ov.classList.add('show');
+  setTimeout(()=> ov.classList.remove('show'), 900);
+}
+
+/* ---------- Router ---------- */
+let ROUTE = 'home';
+let TUTORIAL_STEP = 0;
+let OPEN_SCREEN = null; // 'moneyIn','moneyOut','creditGiven','creditReceived','txDetail' etc
+let SCREEN_CTX = {};
+
+function navigate(route){ ROUTE = route; OPEN_SCREEN=null; render(); }
+function openScreen(name, ctx){ OPEN_SCREEN = name; SCREEN_CTX = ctx||{}; render(); }
+function closeScreen(){ OPEN_SCREEN = null; render(); }
+
+/* ---------- Derived data ---------- */
+function todaysTx(){ const d = todayStr(); return STATE.transactions.filter(x=>x.date===d); }
+function sumBy(arr, type){ return arr.filter(x=>x.type===type).reduce((s,x)=>s+Number(x.amount),0); }
+function totalCashInHand(){
+  const inSum = sumBy(STATE.transactions,'in');
+  const outSum = sumBy(STATE.transactions,'out');
+  // Credit given hands cash/value to someone else, so it reduces cash in hand until they repay.
+  const credGivenOut = STATE.credits.filter(c=>c.type==='given').reduce((s,c)=>s+Number(c.amount),0);
+  // Repayments against credit given bring that cash back in.
+  const credRecSum = STATE.payments.filter(p=>{
+    const c = STATE.credits.find(cr=>cr.id===p.creditId);
+    return c && c.type==='given';
+  }).reduce((s,p)=>s+Number(p.amount),0);
+  // Credit received is already logged as an 'in' transaction above, so no separate adjustment needed for it.
+  return inSum - outSum - credGivenOut + credRecSum;
+}
+function pendingCreditTotal(){
+  return STATE.credits.filter(c=>c.type==='given').reduce((s,c)=>{
+    const paidSum = STATE.payments.filter(p=>p.creditId===c.id).reduce((a,p)=>a+Number(p.amount),0);
+    const rem = Number(c.amount) - paidSum;
+    return s + Math.max(rem,0);
+  },0);
+}
+function creditPaidAmount(creditId){
+  return STATE.payments.filter(p=>p.creditId===creditId).reduce((s,p)=>s+Number(p.amount),0);
+}
+
+/* ---------- Icons (inline emoji-style for zero dependency) ---------- */
+const ICO = { in:'💵', out:'💸', cg:'🤝', cr:'📥', sum:'📊', home:'🏠', tx:'💳', cr2:'👥', rep:'📈', prof:'👤',
+  mic:'🎙️', back:'←', moon:'🌙', sun:'☀️', search:'🔎', camera:'📷', bell:'🔔' };
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render(){
+  document.body.classList.toggle('dark', !!STATE.settings.dark);
+  applyThemeAccent();
+  document.documentElement.setAttribute('data-lang', LANG);
+  document.getElementById('root').setAttribute('data-lang', LANG);
+  const root = document.getElementById('root');
+  if(!CURRENT_USER_ID){
+    root.innerHTML = renderAuthScreen();
+    attachAuthHandlers();
+    return;
+  }
+  if(!APP_UNLOCKED){
+    root.innerHTML = renderLockScreen();
+    attachLockHandlers();
+    return;
+  }
+  root.innerHTML = renderApp();
+  attachHandlers();
+}
+
+/* ---------- PIN lock screen ---------- */
+let LOCK_INPUT = '';
+let LOCK_ERROR = '';
+let LOCK_MODE = 'unlock'; // 'unlock' | 'create' | 'confirm' | 'disable'
+let LOCK_PENDING_PIN = '';
+function renderLockScreen(){
+  const titleMap = { unlock:t('enterPin'), create:t('createPin'), confirm:t('confirmPin'), disable:t('disablePin') };
+  const dots = [0,1,2,3].map(i=>`<div class="lock-dot ${i<LOCK_INPUT.length?'filled':''}"></div>`).join('');
+  return `<div class="lock-screen">
+    <div class="lock-title">🔒 ${titleMap[LOCK_MODE]}</div>
+    <div class="lock-dots">${dots}</div>
+    <div class="lock-keypad">
+      ${['1','2','3','4','5','6','7','8','9','','0','⌫'].map(k=> k? `<button class="lock-key" data-lockkey="${k}" ${k===''?'style="visibility:hidden"':''}>${k}</button>` : `<div></div>`).join('')}
+    </div>
+    <div class="lock-error">${LOCK_ERROR}</div>
+  </div>`;
+}
+function attachLockHandlers(){
+  document.querySelectorAll('[data-lockkey]').forEach(el=> el.addEventListener('click', ()=>{
+    const k = el.getAttribute('data-lockkey');
+    if(k==='⌫'){ LOCK_INPUT = LOCK_INPUT.slice(0,-1); LOCK_ERROR=''; render(); return; }
+    if(LOCK_INPUT.length>=4) return;
+    LOCK_INPUT += k;
+    if(LOCK_INPUT.length===4){ handleLockSubmit(); }
+    else render();
+  }));
+}
+function handleLockSubmit(){
+  if(LOCK_MODE==='unlock'){
+    if(LOCK_INPUT===STATE.settings.pin){ APP_UNLOCKED = true; LOCK_INPUT=''; LOCK_ERROR=''; render(); }
+    else { LOCK_ERROR = t('wrongPin'); LOCK_INPUT=''; render(); }
+  } else if(LOCK_MODE==='create'){
+    LOCK_PENDING_PIN = LOCK_INPUT; LOCK_INPUT=''; LOCK_MODE='confirm'; LOCK_ERROR=''; render();
+  } else if(LOCK_MODE==='confirm'){
+    if(LOCK_INPUT===LOCK_PENDING_PIN){
+      STATE.settings.pin = LOCK_INPUT; STATE.settings.pinEnabled = true; APP_UNLOCKED = true;
+      persist(); LOCK_INPUT=''; LOCK_MODE='unlock'; LOCK_PENDING_PIN=''; LOCK_ERROR='';
+      showToast(t('pinSet')); render();
+    } else { LOCK_ERROR = t('pinMismatch'); LOCK_INPUT=''; LOCK_MODE='create'; render(); }
+  } else if(LOCK_MODE==='disable'){
+    if(LOCK_INPUT===STATE.settings.pin){
+      STATE.settings.pin = null; STATE.settings.pinEnabled = false; APP_UNLOCKED = true;
+      persist(); LOCK_INPUT=''; LOCK_MODE='unlock'; LOCK_ERROR='';
+      showToast(t('pinRemoved')); render();
+    } else { LOCK_ERROR = t('wrongPin'); LOCK_INPUT=''; render(); }
+  }
+}
+function startCreatePin(){ LOCK_MODE='create'; LOCK_INPUT=''; LOCK_ERROR=''; LOCK_PENDING_PIN=''; APP_UNLOCKED=false; render(); }
+function startDisablePin(){ LOCK_MODE='disable'; LOCK_INPUT=''; LOCK_ERROR=''; APP_UNLOCKED=false; render(); }
+
+/* ---------- Auth screens (login / signup / OTP / forgot password) ---------- */
+function renderAuthScreen(){
+  if(AUTH_SCREEN==='signup') return renderSignupScreen();
+  if(AUTH_SCREEN==='otp') return renderOtpScreen();
+  if(AUTH_SCREEN==='forgotEmail') return renderForgotEmailScreen();
+  if(AUTH_SCREEN==='forgotReset') return renderForgotResetScreen();
+  return renderLoginScreen();
+}
+
+function renderLoginScreen(){
+  const f = AUTH_FORM;
+  const bizName = STATE.settings.businessName || 'LedgerLoop';
+  const initial = bizName.trim().charAt(0).toUpperCase() || 'L';
+  return `<div class="auth-screen">
+    <div class="auth-hero">
+      <div class="auth-logo">${initial}</div>
+      <div class="auth-title">${escapeHtml(bizName)}</div>
+      <div class="auth-sub">${t('tagline')}</div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <button class="auth-tab ${f.tab==='phone'?'active':''}" data-authtab="phone">📱 ${t('phone')}</button>
+        <button class="auth-tab ${f.tab==='email'?'active':''}" data-authtab="email">✉️ ${t('email')}</button>
+      </div>
+      ${f.error? `<div class="auth-error">⚠️ ${escapeHtml(f.error)}</div>`:''}
+      ${f.tab==='phone' ? `
+        <div class="field"><label>${t('phone')}</label><input id="authPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" placeholder="9876543210" value="${escapeAttr(f.phone)}"></div>
+        <div class="auth-hint">💡 ${t('phoneHint')}</div>
+        <div class="remember-row"><input type="checkbox" id="rememberChk" ${f.remember?'checked':''}> <label for="rememberChk">${t('rememberMe')}</label></div>
+        <button class="btn-primary" id="sendOtpBtn">${t('sendOtp')}</button>
+      ` : `
+        <div class="field"><label>${t('email')}</label><input id="authEmail" type="email" autocomplete="email" placeholder="you@shop.com" value="${escapeAttr(f.email)}"></div>
+        <div class="field pw-wrap"><label>${t('password')}</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••" value="${escapeAttr(f.password)}"><button type="button" class="pw-toggle" data-pw-toggle="authPassword">${t('showPw')}</button></div>
+        <div class="auth-hint">💡 ${t('emailHint')}</div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="remember-row" style="margin:2px 0;"><input type="checkbox" id="rememberChk" ${f.remember?'checked':''}> <label for="rememberChk">${t('rememberMe')}</label></div>
+          <button class="link-btn" id="forgotPassBtn" style="margin-bottom:14px;">${t('forgotQ')}</button>
+        </div>
+        <button class="btn-primary" id="emailLoginBtn">${t('signIn')}</button>
+      `}
+      <div class="auth-divider">${t('or')}</div>
+      <button class="google-btn" id="googleLoginBtn"><span class="google-g">G</span> ${t('continueGoogle')}</button>
+      <div class="demo-note">${t('googleDemoNote')}</div>
+      <div class="auth-link">${t('noAccount')} <button class="link-inline" id="goSignupBtn">${t('signUp')}</button></div>
+    </div>
+  </div>`;
+}
+
+function renderSignupScreen(){
+  const f = AUTH_FORM;
+  const firstUser = STATE.users.length===0;
+  return `<div class="auth-screen">
+    <div class="auth-hero" style="padding:36px 24px 30px;">
+      <div class="auth-title">${t('createAccount')}</div>
+      <div class="auth-sub">${t('tagline')}</div>
+    </div>
+    <div class="auth-card">
+      ${!firstUser? `<button class="back-link" id="authBack">${ICO.back} ${t('back')}</button>` : ''}
+      ${f.error? `<div class="auth-error">${escapeHtml(f.error)}</div>`:''}
+      <div class="field"><label>${t('yourName')}</label><input id="signupName" autocomplete="name" value="${escapeAttr(f.name)}" placeholder="${t('yourName')}"></div>
+      <div class="auth-tabs">
+        <button class="auth-tab ${f.tab!=='email'?'active':''}" data-authtab="phone">📱 ${t('phone')}</button>
+        <button class="auth-tab ${f.tab==='email'?'active':''}" data-authtab="email">✉️ ${t('email')}</button>
+      </div>
+      ${f.tab!=='email' ? `
+        <div class="field"><label>${t('phone')}</label><input id="signupPhone" type="tel" inputmode="numeric" autocomplete="tel" maxlength="10" value="${escapeAttr(f.phone)}" placeholder="9876543210"></div>
+      ` : `
+        <div class="field"><label>${t('email')}</label><input id="signupEmail" type="email" autocomplete="email" value="${escapeAttr(f.email)}" placeholder="you@shop.com"></div>
+      `}
+      <div class="field pw-wrap"><label>${t('password')}</label><input id="signupPassword" type="password" autocomplete="new-password" value="${escapeAttr(f.password)}" placeholder="••••••••"><button type="button" class="pw-toggle" data-pw-toggle="signupPassword">${t('showPw')}</button></div>
+      ${!firstUser? `<div class="field"><label>${t('role')}</label>
+        <select id="signupRole">
+          <option value="staff" ${f.role==='staff'?'selected':''}>${t('staff')}</option>
+          <option value="accountant" ${f.role==='accountant'?'selected':''}>${t('accountant')}</option>
+          <option value="owner" ${f.role==='owner'?'selected':''}>${t('owner')}</option>
+        </select>
+      </div>` : `<div style="font-size:12px; color:var(--text-muted); margin:-6px 0 16px;">${t('firstOwnerNote')}</div>`}
+      <button class="btn-primary" id="createAccountBtn">${t('createAccount')}</button>
+      ${!firstUser? `<div class="auth-link">${t('haveAccount')} <button class="link-inline" id="goLoginBtn">${t('signIn')}</button></div>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderOtpScreen(){
+  const f = AUTH_FORM;
+  return `<div class="auth-screen">
+    <div class="auth-hero" style="padding:36px 24px 30px;">
+      <div class="auth-title">${t('verifyOtp')}</div>
+      <div class="auth-sub">${t('sentTo')} ${escapeHtml(f.phone)}</div>
+    </div>
+    <div class="auth-card">
+      <button class="back-link" id="authBack">${ICO.back} ${t('back')}</button>
+      <div class="demo-otp-banner">🔑 ${t('demoOtp')}: <b>${f.sentOtp}</b></div>
+      ${f.error? `<div class="auth-error">${escapeHtml(f.error)}</div>`:''}
+      <div class="field"><label>${t('enterOtp')}</label><input id="otpInput" inputmode="numeric" autocomplete="one-time-code" maxlength="4" value="${escapeAttr(f.otp)}" placeholder="0000" style="letter-spacing:8px; font-size:20px; text-align:center;"></div>
+      <button class="btn-primary" id="verifyOtpBtn">${t('verifyOtp')}</button>
+      <div class="auth-link"><button class="link-inline" id="resendOtpBtn">${t('resendOtp')}</button></div>
+    </div>
+  </div>`;
+}
+
+function renderForgotEmailScreen(){
+  const f = AUTH_FORM;
+  return `<div class="auth-screen">
+    <div class="auth-hero" style="padding:36px 24px 30px;">
+      <div class="auth-title">${t('resetPassword')}</div>
+      <div class="auth-sub">${t('enterEmailReset')}</div>
+    </div>
+    <div class="auth-card">
+      <button class="back-link" id="authBack">${ICO.back} ${t('back')}</button>
+      ${f.error? `<div class="auth-error">${escapeHtml(f.error)}</div>`:''}
+      <div class="field"><label>${t('email')}</label><input id="forgotEmailInput" type="email" autocomplete="email" value="${escapeAttr(f.email)}" placeholder="you@shop.com"></div>
+      <button class="btn-primary" id="sendResetBtn">${t('sendResetCode')}</button>
+    </div>
+  </div>`;
+}
+
+function renderForgotResetScreen(){
+  const f = AUTH_FORM;
+  return `<div class="auth-screen">
+    <div class="auth-hero" style="padding:36px 24px 30px;">
+      <div class="auth-title">${t('newPassword')}</div>
+    </div>
+    <div class="auth-card">
+      <button class="back-link" id="authBack">${ICO.back} ${t('back')}</button>
+      <div class="demo-otp-banner">🔑 ${t('demoResetCode')}: <b>${f.sentOtp}</b></div>
+      ${f.error? `<div class="auth-error">${escapeHtml(f.error)}</div>`:''}
+      <div class="field"><label>${t('enterOtp')}</label><input id="resetCodeInput" inputmode="numeric" autocomplete="one-time-code" maxlength="4" value="${escapeAttr(f.otp)}" placeholder="0000" style="letter-spacing:8px; font-size:20px; text-align:center;"></div>
+      <div class="field pw-wrap"><label>${t('newPassword')}</label><input id="newPasswordInput" type="password" autocomplete="new-password" value="${escapeAttr(f.password)}" placeholder="••••••••"><button type="button" class="pw-toggle" data-pw-toggle="newPasswordInput">${t('showPw')}</button></div>
+      <button class="btn-primary" id="resetPasswordBtn">${t('updatePassword')}</button>
+    </div>
+  </div>`;
+}
+
+function attachAuthHandlers(){
+  const root = document.getElementById('root');
+  root.querySelectorAll('[data-authtab]').forEach(el=> el.addEventListener('click', ()=>{ AUTH_FORM.tab = el.getAttribute('data-authtab'); AUTH_FORM.error=''; render(); }));
+  root.querySelectorAll('[data-pw-toggle]').forEach(btn=> btn.addEventListener('click', ()=>{
+    const input = document.getElementById(btn.getAttribute('data-pw-toggle'));
+    if(!input) return;
+    const showing = input.type==='text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? t('showPw') : t('hidePw');
+  }));
+
+  const sendOtpBtn = document.getElementById('sendOtpBtn');
+  if(sendOtpBtn) sendOtpBtn.addEventListener('click', handleSendOtp);
+  const emailLoginBtn = document.getElementById('emailLoginBtn');
+  if(emailLoginBtn) emailLoginBtn.addEventListener('click', handleEmailLogin);
+  const googleLoginBtn = document.getElementById('googleLoginBtn');
+  if(googleLoginBtn) googleLoginBtn.addEventListener('click', handleGoogleLogin);
+  const forgotPassBtn = document.getElementById('forgotPassBtn');
+  if(forgotPassBtn) forgotPassBtn.addEventListener('click', ()=>{ AUTH_SCREEN='forgotEmail'; AUTH_FORM.error=''; render(); });
+  const goSignupBtn = document.getElementById('goSignupBtn');
+  if(goSignupBtn) goSignupBtn.addEventListener('click', ()=>{ AUTH_SCREEN='signup'; AUTH_FORM.error=''; render(); });
+  const goLoginBtn = document.getElementById('goLoginBtn');
+  if(goLoginBtn) goLoginBtn.addEventListener('click', ()=>{ AUTH_SCREEN='login'; AUTH_FORM.error=''; render(); });
+  const authBack = document.getElementById('authBack');
+  if(authBack) authBack.addEventListener('click', ()=>{ AUTH_SCREEN='login'; AUTH_FORM.error=''; render(); });
+  const createAccountBtn = document.getElementById('createAccountBtn');
+  if(createAccountBtn) createAccountBtn.addEventListener('click', handleCreateAccount);
+  const verifyOtpBtn = document.getElementById('verifyOtpBtn');
+  if(verifyOtpBtn) verifyOtpBtn.addEventListener('click', handleVerifyOtp);
+  const resendOtpBtn = document.getElementById('resendOtpBtn');
+  if(resendOtpBtn) resendOtpBtn.addEventListener('click', handleResendOtp);
+  const sendResetBtn = document.getElementById('sendResetBtn');
+  if(sendResetBtn) sendResetBtn.addEventListener('click', handleSendResetCode);
+  const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+  if(resetPasswordBtn) resetPasswordBtn.addEventListener('click', handleResetPassword);
+
+  const bind = (id, key)=>{ const el = document.getElementById(id); if(el) el.addEventListener('input', e=> AUTH_FORM[key]=e.target.value); };
+  bind('authEmail','email'); bind('authPassword','password');
+  bind('signupName','name'); bind('signupPhone','phone'); bind('signupEmail','email'); bind('signupPassword','password');
+  bind('forgotEmailInput','email');
+  const rememberChk = document.getElementById('rememberChk');
+  if(rememberChk) rememberChk.addEventListener('change', e=> AUTH_FORM.remember = e.target.checked);
+  const signupRole = document.getElementById('signupRole');
+  if(signupRole) signupRole.addEventListener('change', e=> AUTH_FORM.role = e.target.value);
+
+  // Fewer taps: auto-send once a full phone number is typed, no need to tap "Send OTP"
+  const authPhoneEl = document.getElementById('authPhone');
+  if(authPhoneEl) authPhoneEl.addEventListener('input', e=>{
+    AUTH_FORM.phone = e.target.value;
+    if(e.target.value.replace(/\D/g,'').length===10) handleSendOtp();
+  });
+  // Fewer taps: auto-verify once all 4 OTP digits are typed, no need to tap "Verify"
+  const otpInputEl = document.getElementById('otpInput');
+  if(otpInputEl) otpInputEl.addEventListener('input', e=>{
+    AUTH_FORM.otp = e.target.value;
+    if(e.target.value.replace(/\D/g,'').length===4) handleVerifyOtp();
+  });
+  // Reset-password code: once 4 digits are in, jump straight to the new-password field
+  const resetCodeEl = document.getElementById('resetCodeInput');
+  if(resetCodeEl) resetCodeEl.addEventListener('input', e=>{
+    AUTH_FORM.otp = e.target.value;
+    if(e.target.value.replace(/\D/g,'').length===4){
+      const pwEl = document.getElementById('newPasswordInput');
+      if(pwEl) pwEl.focus();
+    }
+  });
+
+  // Enter key submits the current form, so people don't have to reach for a button
+  const onEnter = (id, fn)=>{ const el = document.getElementById(id); if(el) el.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); fn(); } }); };
+  onEnter('authPassword', handleEmailLogin);
+  onEnter('signupPassword', handleCreateAccount);
+  onEnter('forgotEmailInput', handleSendResetCode);
+  onEnter('newPasswordInput', handleResetPassword);
+
+  // Auto-focus the first field of whichever auth screen is showing, so typing can start immediately
+  let focusId = null;
+  if(AUTH_SCREEN==='login') focusId = AUTH_FORM.tab==='phone' ? 'authPhone' : 'authEmail';
+  else if(AUTH_SCREEN==='signup') focusId = 'signupName';
+  else if(AUTH_SCREEN==='otp') focusId = 'otpInput';
+  else if(AUTH_SCREEN==='forgotEmail') focusId = 'forgotEmailInput';
+  else if(AUTH_SCREEN==='forgotReset') focusId = 'resetCodeInput';
+  if(focusId){ const el = document.getElementById(focusId); if(el) el.focus(); }
+}
+
+function genOtp(){ return String(Math.floor(1000+Math.random()*9000)); }
+
+function handleSendOtp(){
+  const phone = (document.getElementById('authPhone').value||'').trim();
+  if(phone.replace(/\D/g,'').length<10){ AUTH_FORM.error = t('invalidPhone'); render(); return; }
+  AUTH_FORM.phone = phone;
+  AUTH_FORM.remember = !!document.getElementById('rememberChk').checked;
+  AUTH_FORM.sentOtp = genOtp();
+  AUTH_FORM.otp = '';
+  AUTH_FORM.error = '';
+  AUTH_SCREEN = 'otp';
+  render();
+}
+function handleResendOtp(){ AUTH_FORM.sentOtp = genOtp(); AUTH_FORM.otp=''; showToast(t('otpSent')); render(); }
+function handleVerifyOtp(){
+  const entered = (document.getElementById('otpInput').value||'').trim();
+  if(entered !== AUTH_FORM.sentOtp){ AUTH_FORM.error = t('wrongOtp'); render(); return; }
+  let user = STATE.users.find(u=>u.phone===AUTH_FORM.phone);
+  if(!user){
+    user = { id: uid(), name: AUTH_FORM.phone, phone: AUTH_FORM.phone, email:'', passHash:null, role: STATE.users.length===0?'owner':'staff', createdAt: Date.now() };
+    STATE.users.push(user);
+    DB.write('users', STATE.users);
+  }
+  completeLogin(user, AUTH_FORM.remember);
+}
+
+function handleEmailLogin(){
+  const email = (document.getElementById('authEmail').value||'').trim().toLowerCase();
+  const password = document.getElementById('authPassword').value||'';
+  const remember = !!document.getElementById('rememberChk').checked;
+  const user = STATE.users.find(u=>u.email && u.email.toLowerCase()===email);
+  if(!user || user.passHash !== simpleHash(password)){
+    AUTH_FORM.error = t('wrongCreds');
+    render(); return;
+  }
+  completeLogin(user, remember);
+}
+
+function handleGoogleLogin(){
+  // No real OAuth backend is connected in this build; this simulates a Google-style account locally
+  // so the flow is fully explorable. Connect a real Firebase project for actual Google Sign-In.
+  let user = STATE.users.find(u=>u.provider==='google');
+  if(!user){
+    user = { id: uid(), name:'Google User', phone:'', email:'demo.google.user@gmail.com', passHash:null, role: STATE.users.length===0?'owner':'staff', provider:'google', createdAt: Date.now() };
+    STATE.users.push(user);
+    DB.write('users', STATE.users);
+  }
+  showToast(t('googleDemoNote'));
+  completeLogin(user, true);
+}
+
+function handleCreateAccount(){
+  const name = (document.getElementById('signupName').value||'').trim();
+  const usingPhone = AUTH_FORM.tab !== 'email';
+  const phone = usingPhone ? (document.getElementById('signupPhone').value||'').trim() : '';
+  const email = usingPhone ? '' : (document.getElementById('signupEmail').value||'').trim().toLowerCase();
+  const password = document.getElementById('signupPassword').value||'';
+  const firstUser = STATE.users.length===0;
+  const roleSelect = document.getElementById('signupRole');
+  const role = firstUser ? 'owner' : (roleSelect ? roleSelect.value : 'staff');
+  if(!name){ AUTH_FORM.error = t('nameRequired'); render(); return; }
+  if(usingPhone){
+    if(phone.replace(/\D/g,'').length<10){ AUTH_FORM.error = t('invalidPhone'); render(); return; }
+  } else {
+    if(!email){ AUTH_FORM.error = t('phoneOrEmailReq'); render(); return; }
+  }
+  if(password.length<4){ AUTH_FORM.error = t('passwordShort'); render(); return; }
+  if(phone && STATE.users.some(u=>u.phone===phone)){ AUTH_FORM.error = t('phoneTaken'); render(); return; }
+  if(email && STATE.users.some(u=>u.email && u.email.toLowerCase()===email)){ AUTH_FORM.error = t('emailTaken'); render(); return; }
+  const user = { id: uid(), name, phone, email, passHash: simpleHash(password), role, createdAt: Date.now() };
+  STATE.users.push(user);
+  DB.write('users', STATE.users);
+  completeLogin(user, true);
+}
+
+function completeLogin(user, remember){
+  CURRENT_USER_ID = user.id;
+  STATE.settings.role = user.role;
+  persist();
+  saveSession(user.id, remember);
+  AUTH_FORM = { tab:'phone', phone:'', email:'', password:'', name:'', remember:true, otp:'', sentOtp:'', role:'staff', error:'' };
+  AUTH_SCREEN = 'login';
+  showCheck(t('welcomeUser')+', '+(user.name||user.phone||user.email)+'!');
+  render();
+}
+
+function handleSendResetCode(){
+  const email = (document.getElementById('forgotEmailInput').value||'').trim().toLowerCase();
+  const user = STATE.users.find(u=>u.email && u.email.toLowerCase()===email);
+  if(!user){ AUTH_FORM.error = t('noAccountEmail'); render(); return; }
+  AUTH_FORM.email = email;
+  AUTH_FORM.sentOtp = genOtp();
+  AUTH_FORM.otp = '';
+  AUTH_FORM.error = '';
+  AUTH_SCREEN = 'forgotReset';
+  render();
+}
+
+function handleResetPassword(){
+  const code = (document.getElementById('resetCodeInput').value||'').trim();
+  const newPass = document.getElementById('newPasswordInput').value||'';
+  if(code !== AUTH_FORM.sentOtp){ AUTH_FORM.error = t('wrongCode'); render(); return; }
+  if(newPass.length<4){ AUTH_FORM.error = t('passwordShort'); render(); return; }
+  const user = STATE.users.find(u=>u.email && u.email.toLowerCase()===AUTH_FORM.email);
+  if(user){ user.passHash = simpleHash(newPass); DB.write('users', STATE.users); }
+  AUTH_SCREEN = 'login';
+  AUTH_FORM.tab = 'email';
+  AUTH_FORM.error = '';
+  showToast(t('passwordUpdated'));
+  render();
+}
+
+function handleLogout(){
+  clearSession();
+  CURRENT_USER_ID = null;
+  APP_UNLOCKED = !STATE.settings.pinEnabled;
+  AUTH_SCREEN = STATE.users.length===0 ? 'signup' : 'login';
+  ROUTE = 'home';
+  OPEN_SCREEN = null;
+  render();
+}
+
+function renderApp(){
+  return `
+    ${renderHeader()}
+    ${renderSummary()}
+    ${renderMainContent()}
+    ${renderBottomNav()}
+    ${renderScreenHost()}
+    ${(!STATE.settings.tutorialSeen && ROUTE==='home') ? renderTutorial() : ''}
+  `;
+}
+
+const TUTORIAL_STEPS = [
+  {icon:ICO.in,  color:'var(--income)',  bg:'var(--income-light)',  titleKey:'tutStep1Title', bodyKey:'tutStep1Body'},
+  {icon:ICO.out, color:'var(--expense)', bg:'var(--expense-light)', titleKey:'tutStep2Title', bodyKey:'tutStep2Body'},
+  {icon:ICO.cg,  color:'var(--gold)',    bg:'var(--gold-light)',    titleKey:'tutStep3Title', bodyKey:'tutStep3Body'},
+  {icon:ICO.sum, color:'var(--primary)', bg:'var(--primary-light)', titleKey:'tutStep4Title', bodyKey:'tutStep4Body'},
+  {icon:'🧭',    color:'var(--primary)', bg:'var(--primary-light)', titleKey:'tutStep5Title', bodyKey:'tutStep5Body'},
+];
+function renderTutorial(){
+  const step = TUTORIAL_STEPS[TUTORIAL_STEP];
+  const isLast = TUTORIAL_STEP === TUTORIAL_STEPS.length-1;
+  const dots = TUTORIAL_STEPS.map((_,i)=>`<div class="tut-dot ${i===TUTORIAL_STEP?'active':''}"></div>`).join('');
+  return `<div class="tutorial-overlay">
+    <div class="tutorial-card">
+      <button class="tutorial-skip" id="tutSkipBtn">${t('tutSkip')} ✕</button>
+      <div class="tutorial-icon" style="background:${step.bg}; color:${step.color};">${step.icon}</div>
+      <div class="tutorial-title">${t(step.titleKey)}</div>
+      <div class="tutorial-body">${t(step.bodyKey)}</div>
+      <div class="tutorial-dots">${dots}</div>
+      <button class="btn-primary" id="tutNextBtn" style="width:100%; margin-top:6px;">${isLast? t('tutDone') : t('tutNext')}</button>
+    </div>
+  </div>`;
+}
+
+function renderHeader(){
+  const hour = new Date().getHours();
+  const greet = hour<12? (LANG==='ta'?'காலை வணக்கம்':'Good Morning') : hour<17? (LANG==='ta'?'மதிய வணக்கம்':'Good Afternoon') : (LANG==='ta'?'மாலை வணக்கம்':'Good Evening');
+  return `
+  <div class="header">
+    <div class="header-top">
+      <div>
+        <p class="biz-name">${escapeHtml(STATE.settings.businessName||'My Shop')}</p>
+        <div class="greeting">${greet} 👋</div>
+      </div>
+      <div class="header-actions">
+        <div class="lang-toggle">
+          <button class="lang-btn ${LANG==='en'?'active':''}" data-lang-switch="en">EN</button>
+          <button class="lang-btn ${LANG==='ta'?'active':''}" data-lang-switch="ta">தமிழ்</button>
+        </div>
+        <button class="icon-btn" id="themeToggle">${STATE.settings.dark? ICO.sun: ICO.moon}</button>
+      </div>
+    </div>
+    <div class="date-pill">📅 ${new Date().toLocaleDateString(LANG==='ta'?'ta-IN':'en-IN', {weekday:'long', day:'numeric', month:'long'})}</div>
+  </div>`;
+}
+
+function renderSummary(){
+  const tx = todaysTx();
+  const inc = sumBy(tx,'in'), exp = sumBy(tx,'out');
+  const profit = inc-exp;
+  const cash = totalCashInHand();
+  const pending = pendingCreditTotal();
+  const gstRate = Number(STATE.settings.gstRate)||0;
+  const gstToday = tx.filter(x=>x.type==='in').reduce((s,x)=> s + gstBreakup(x.amount).gst, 0);
+  const cards = [
+    {label:t('income'), val:fmtMoney(inc), dot:'var(--income)'},
+    {label:t('expense'), val:fmtMoney(exp), dot:'var(--expense)'},
+    {label:t('cash'), val:fmtMoney(cash), dot:'var(--primary)'},
+    {label:t('profit'), val:fmtMoney(profit), dot: profit>=0 ? 'var(--income)' : 'var(--expense)'},
+    {label:t('pending'), val:fmtMoney(pending), dot:'var(--gold)'},
+  ];
+  if(gstRate>0){
+    cards.push({label:t('gstCollected'), val:fmtMoney(gstToday), dot:'var(--primary)'});
+  }
+  return `<div class="summary-scroll hide-scroll">
+    ${cards.map(c=>`<div class="summary-card">
+      <div class="label"><span class="dot" style="background:${c.dot}"></span>${c.label}</div>
+      <div class="val">${c.val}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function renderMainContent(){
+  if(ROUTE==='home') return renderHome();
+  if(ROUTE==='transactions') return renderTransactionsScreenInline();
+  if(ROUTE==='credit') return renderCreditScreenInline();
+  if(ROUTE==='reports') return renderReportsScreenInline();
+  if(ROUTE==='profile') return renderProfileScreenInline();
+  return '';
+}
+
+function renderHome(){
+  const recent = [...STATE.transactions].sort((a,b)=>b.ts-a.ts).slice(0,6);
+  const locked = !can('addTransaction') && (STATE.settings.role==='accountant');
+  return `
+  ${renderReminderBanner()}
+  <div class="section">
+    <div class="section-title-row">
+      <div class="section-title" style="margin:0;">${t('quickActions')}</div>
+      ${STATE.settings.role!=='owner' ? `<span class="role-badge">${t(STATE.settings.role)}</span>` : ''}
+    </div>
+    <div class="qa-grid ${locked?'locked-card':''}">
+      <button class="qa-card qa-in" data-open="moneyIn"><div class="qa-icon">${ICO.in}</div><div class="qa-label">${t('moneyIn')}</div></button>
+      <button class="qa-card qa-out" data-open="moneyOut"><div class="qa-icon">${ICO.out}</div><div class="qa-label">${t('moneyOut')}</div></button>
+      <button class="qa-card qa-cg" data-open="creditGiven"><div class="qa-icon">${ICO.cg}</div><div class="qa-label">${t('creditGiven')}</div></button>
+      <button class="qa-card qa-cr" data-open="creditReceived"><div class="qa-icon">${ICO.cr}</div><div class="qa-label">${t('creditReceived')}</div></button>
+      <button class="qa-card qa-full" data-nav="reports"><div style="display:flex;align-items:center;gap:10px;"><div class="qa-icon" style="background:var(--primary-light)">${ICO.sum}</div><div class="qa-label">${t('dailySummary')}</div></div><span style="color:var(--text-faint)">›</span></button>
+    </div>
+  </div>
+  ${renderRecurringSection()}
+  ${renderInsights()}
+  <div class="section">
+    <div class="section-title-row">
+      <div class="section-title" style="margin:0;">${t('recent')}</div>
+      <button class="link-btn" data-nav="transactions">${t('seeAll')}</button>
+    </div>
+    ${recent.length? recent.map(renderTxItem).join('') : renderEmptyTx()}
+  </div>`;
+}
+
+function overdueCredits(){
+  const cutoff = Date.now() - 7*86400000;
+  return STATE.credits.filter(c=>{
+    if(c.type!=='given') return false;
+    if(c.ts > cutoff) return false;
+    const rem = Number(c.amount) - creditPaidAmount(c.id);
+    return rem > 0;
+  });
+}
+function renderReminderBanner(){
+  const overdue = overdueCredits();
+  if(!overdue.length) return '';
+  const c = overdue[0];
+  const rem = Number(c.amount) - creditPaidAmount(c.id);
+  const msg = LANG==='ta'
+    ? `${escapeHtml(c.customer)} இடம் ${fmtMoney(rem)} 7+ நாட்களாக நிலுவையில் உள்ளது.`
+    : `${escapeHtml(c.customer)} owes ${fmtMoney(rem)}, pending 7+ days.`;
+  return `<div class="reminder-banner">🔔 <span style="flex:1;">${msg}</span><button data-remind="${c.id}">${LANG==='ta'?'நினைவூட்டு':'Remind'}</button></div>`;
+}
+
+function renderInsights(){
+  const insights = computeInsights();
+  if(!insights.length) return '';
+  return `<div class="section"><div class="section-title">✨ ${t('insights')}</div>
+    ${insights.map(i=>`<div class="insight-card"><span>${i.icon}</span><span>${i.text}</span></div>`).join('')}
+  </div>`;
+}
+function computeInsights(){
+  const out = [];
+  const today = todayStr();
+  const yest = new Date(Date.now()-86400000).toISOString().slice(0,10);
+  const expToday = sumBy(STATE.transactions.filter(x=>x.date===today),'out');
+  const expYest = sumBy(STATE.transactions.filter(x=>x.date===yest),'out');
+  if(expYest>0){
+    const pct = Math.round(((expToday-expYest)/expYest)*100);
+    if(Math.abs(pct)>=10) out.push({icon: pct>0?'📈':'📉', text:(LANG==='ta'? `இன்றைய செலவு ${Math.abs(pct)}% ${pct>0?'அதிகரித்தது':'குறைந்தது'}.` : `Today's expenses ${pct>0?'increased':'decreased'} by ${Math.abs(pct)}% vs yesterday.`)});
+  }
+  const pending = pendingCreditTotal();
+  if(pending>0) out.push({icon:'🟡', text: LANG==='ta'? `உங்களுக்கு ${fmtMoney(pending)} நிலுவை கடன் உள்ளது.` : `You have ${fmtMoney(pending)} pending credit to collect.`});
+  const last7 = STATE.transactions.filter(x=> (Date.now()-x.ts) < 7*86400000 );
+  const byCat = {};
+  last7.filter(x=>x.type==='in').forEach(x=>{ byCat[x.category]=(byCat[x.category]||0)+Number(x.amount); });
+  const top = Object.entries(byCat).sort((a,b)=>b[1]-a[1])[0];
+  if(top) out.push({icon:'⭐', text: LANG==='ta'? `இந்த வாரம் அதிக வருமானம்: ${top[0]}.` : `${top[0]} is your top income category this week.`});
+  const daysWithTx = [...new Set(STATE.transactions.map(x=>x.date))];
+  if(daysWithTx.length>=3){
+    const avgProfit = daysWithTx.map(d=>{
+      const tx = STATE.transactions.filter(x=>x.date===d);
+      return sumBy(tx,'in')-sumBy(tx,'out');
+    }).reduce((a,b)=>a+b,0)/daysWithTx.length;
+    out.push({icon:'💡', text: LANG==='ta'? `சராசரி தினசரி லாபம்: ${fmtMoney(Math.round(avgProfit))}.` : `Your average daily profit is ${fmtMoney(Math.round(avgProfit))}.`});
+  }
+  return out.slice(0,3);
+}
+
+function renderTxItem(x){
+  const isIn = x.type==='in';
+  const icoBg = isIn? 'var(--income-light)': 'var(--expense-light)';
+  const color = isIn? 'var(--income)': 'var(--expense)';
+  return `<div class="tx-item" data-tx-detail="${x.id}">
+    <div class="tx-ico" style="background:${icoBg}">${isIn? ICO.in : ICO.out}</div>
+    <div class="tx-mid">
+      <div class="tx-title">${escapeHtml(x.category||'')}${x.person? ' · '+escapeHtml(x.person):''}</div>
+      <div class="tx-sub">${fmtDate(x.date)} · ${x.time||''}</div>
+    </div>
+    <div class="tx-amt" style="color:${color}">${isIn?'+':'-'}${fmtMoney(x.amount)}</div>
+  </div>`;
+}
+function renderEmptyTx(){
+  return `<div class="empty-state"><div class="em-ico">🧾</div><div style="font-weight:700;">${t('noTx')}</div><div style="font-size:12px;margin-top:4px;">${t('noTxSub')}</div></div>`;
+}
+
+/* ---------- Transactions screen ---------- */
+let TX_FILTER = {type:'all', search:''};
+function renderTransactionsScreenInline(){
+  return `<div class="section">
+    <div class="search-box"><span>${ICO.search}</span><input id="txSearch" placeholder="${t('search')}" value="${escapeAttr(TX_FILTER.search)}"></div>
+    <div class="filter-row hide-scroll">
+      <button class="filter-chip ${TX_FILTER.type==='all'?'active':''}" data-txfilter="all">${t('all')}</button>
+      <button class="filter-chip ${TX_FILTER.type==='in'?'active':''}" data-txfilter="in">${t('moneyIn')}</button>
+      <button class="filter-chip ${TX_FILTER.type==='out'?'active':''}" data-txfilter="out">${t('moneyOut')}</button>
+    </div>
+    <div id="txListWrap">${renderTxListItems()}</div>
+  </div>`;
+}
+function renderTxListItems(){
+  let list = [...STATE.transactions].sort((a,b)=>b.ts-a.ts);
+  if(TX_FILTER.type!=='all') list = list.filter(x=>x.type===TX_FILTER.type);
+  if(TX_FILTER.search) list = list.filter(x=> (x.category+' '+(x.person||'')+' '+(x.notes||'')).toLowerCase().includes(TX_FILTER.search.toLowerCase()));
+  return list.length? list.map(renderTxItem).join('') : renderEmptyTx();
+}
+function updateTxListView(){
+  const wrap = document.getElementById('txListWrap');
+  if(!wrap) return;
+  wrap.innerHTML = renderTxListItems();
+  wrap.querySelectorAll('[data-tx-detail]').forEach(el=> el.addEventListener('click', ()=> openScreen('txDetail', {id: el.getAttribute('data-tx-detail')})));
+}
+
+/* ---------- Credit screen ---------- */
+let CREDIT_TAB = 'given';
+let CREDIT_SEARCH = '';
+function renderCreditScreenInline(){
+  return `<div class="section">
+    <div class="pill-tab-row">
+      <button class="pill-tab ${CREDIT_TAB==='given'?'active':''}" data-credittab="given">${t('creditGiven')}</button>
+      <button class="pill-tab ${CREDIT_TAB==='received'?'active':''}" data-credittab="received">${t('creditReceived')}</button>
+    </div>
+    <div class="search-box"><span>${ICO.search}</span><input id="creditSearch" placeholder="${t('search')}" value="${escapeAttr(CREDIT_SEARCH)}"></div>
+    <div id="creditListWrap">${renderCreditListItems()}</div>
+  </div>`;
+}
+function renderCreditListItems(){
+  let list = STATE.credits.filter(c=>c.type===CREDIT_TAB).sort((a,b)=>b.ts-a.ts);
+  if(CREDIT_SEARCH) list = list.filter(c=> c.customer.toLowerCase().includes(CREDIT_SEARCH.toLowerCase()));
+  return list.length? list.map(renderCreditCard).join('') : `<div class="empty-state"><div class="em-ico">👥</div><div style="font-weight:700;">${t('noCustomers')}</div></div>`;
+}
+function updateCreditListView(){
+  const wrap = document.getElementById('creditListWrap');
+  if(!wrap) return;
+  wrap.innerHTML = renderCreditListItems();
+  attachCreditCardHandlers(wrap);
+}
+function attachCreditCardHandlers(scopeEl){
+  scopeEl.querySelectorAll('[data-record-payment]').forEach(el=> el.addEventListener('click', ()=>{ resetForm(); openScreen('recordPayment', {id: el.getAttribute('data-record-payment')}); }));
+  scopeEl.querySelectorAll('[data-credit-detail]').forEach(el=> el.addEventListener('click', ()=> openScreen('creditDetail', {id: el.getAttribute('data-credit-detail')})));
+  scopeEl.querySelectorAll('[data-remind]').forEach(el=> el.addEventListener('click', (ev)=>{ ev.stopPropagation(); sendReminder(el.getAttribute('data-remind')); }));
+}
+function renderCreditCard(c){
+  const paid = creditPaidAmount(c.id);
+  const rem = Math.max(Number(c.amount)-paid,0);
+  const pct = Math.min(100, Math.round((paid/Number(c.amount||1))*100));
+  return `<div class="credit-card">
+    <div style="display:flex; justify-content:space-between;" data-credit-detail="${c.id}">
+      <div><div class="cname">${escapeHtml(c.customer)}</div><div class="cphone">${escapeHtml(c.phone||'')}</div></div>
+      <div style="text-align:right;"><div style="font-family:var(--font-display); font-weight:700;">${fmtMoney(c.amount)}</div><div style="font-size:11px; color:var(--text-muted);">${fmtDate(c.date)}</div></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+    <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
+      <span>${t('paid')}: ${fmtMoney(paid)}</span><span>${rem<=0? t('fullyPaid') : t('remaining')+': '+fmtMoney(rem)}</span>
+    </div>
+    ${rem>0 && c.type==='given' && can('addTransaction') ? `<button class="btn-primary" style="margin-top:12px; padding:10px;" data-record-payment="${c.id}">${t('recordPayment')}</button>` : ''}
+    ${rem>0 && c.phone ? `<div class="action-row-sm">
+      <a class="action-btn-sm" href="tel:${escapeAttr(c.phone)}">📞 ${t('call')}</a>
+      <button class="action-btn-sm" data-remind="${c.id}">💬 ${t('remindWA')}</button>
+    </div>` : ''}
+  </div>`;
+}
+
+/* ---------- Reports screen ---------- */
+let REPORT_RANGE = 'week';
+function renderReportsScreenInline(){
+  return `<div class="section">
+    <div class="range-row">
+      <button class="range-btn ${REPORT_RANGE==='day'?'active':''}" data-range="day">${t('day')}</button>
+      <button class="range-btn ${REPORT_RANGE==='week'?'active':''}" data-range="week">${t('week')}</button>
+      <button class="range-btn ${REPORT_RANGE==='month'?'active':''}" data-range="month">${t('month')}</button>
+      <button class="range-btn ${REPORT_RANGE==='year'?'active':''}" data-range="year">${t('year')}</button>
+    </div>
+    ${renderReportStats()}
+    ${renderBudgetProgress()}
+    <div class="chart-card"><h4>${t('incomeVsExpense')}</h4><canvas id="chartTrend" height="160"></canvas></div>
+    <div class="chart-card"><h4>${t('byCategory')}</h4><canvas id="chartCat" height="180"></canvas></div>
+    <button class="btn-secondary" id="exportCsvBtn">⬇️ ${t('exportCsv')}</button>
+  </div>`;
+}
+function rangeDays(range){
+  if(range==='day') return 1;
+  if(range==='week') return 7;
+  if(range==='month') return 30;
+  return 365;
+}
+function rangeTx(){
+  const days = rangeDays(REPORT_RANGE);
+  const cutoff = Date.now() - days*86400000;
+  return STATE.transactions.filter(x=>x.ts>=cutoff);
+}
+function renderReportStats(){
+  const tx = rangeTx();
+  const inc = sumBy(tx,'in'), exp = sumBy(tx,'out');
+  return `<div class="stat-grid">
+    <div class="stat-box"><div class="lbl">${t('income')}</div><div class="v" style="color:var(--income)">${fmtMoney(inc)}</div></div>
+    <div class="stat-box"><div class="lbl">${t('expense')}</div><div class="v" style="color:var(--expense)">${fmtMoney(exp)}</div></div>
+    <div class="stat-box"><div class="lbl">${t('profit')}</div><div class="v">${fmtMoney(inc-exp)}</div></div>
+    <div class="stat-box"><div class="lbl">${t('txCount')}</div><div class="v">${tx.length}</div></div>
+  </div>`;
+}
+function drawCharts(){
+  if(!window.Chart) return;
+  const tx = rangeTx();
+  const days = rangeDays(REPORT_RANGE);
+  const buckets = Math.min(days, 12);
+  const step = Math.max(1, Math.floor(days/buckets));
+  const labels = [], incData=[], expData=[];
+  for(let i=buckets-1;i>=0;i--){
+    const end = Date.now() - i*step*86400000;
+    const start = end - step*86400000;
+    const bucketTx = tx.filter(x=>x.ts>=start && x.ts<end);
+    labels.push(new Date(end).toLocaleDateString(LANG==='ta'?'ta-IN':'en-IN',{day:'numeric',month:'short'}));
+    incData.push(sumBy(bucketTx,'in'));
+    expData.push(sumBy(bucketTx,'out'));
+  }
+  const c1 = document.getElementById('chartTrend');
+  if(c1){
+    if(c1._chart) c1._chart.destroy();
+    c1._chart = new Chart(c1, {type:'line', data:{labels, datasets:[
+      {label:t('income'), data:incData, borderColor:'#3F9142', backgroundColor:'rgba(63,145,66,.15)', fill:true, tension:.3},
+      {label:t('expense'), data:expData, borderColor:'#DC4C4C', backgroundColor:'rgba(220,76,76,.15)', fill:true, tension:.3},
+    ]}, options:{plugins:{legend:{labels:{color:getCssVar('--text')}}}, scales:{x:{ticks:{color:getCssVar('--text-muted')}, grid:{display:false}}, y:{ticks:{color:getCssVar('--text-muted')}, grid:{color:getCssVar('--border')}}}}});
+  }
+  const c2 = document.getElementById('chartCat');
+  if(c2){
+    const byCat = {};
+    tx.filter(x=>x.type==='out').forEach(x=>{ byCat[x.category]=(byCat[x.category]||0)+Number(x.amount); });
+    const catLabels = Object.keys(byCat);
+    const catData = Object.values(byCat);
+    if(c2._chart) c2._chart.destroy();
+    if(catLabels.length){
+      c2._chart = new Chart(c2, {type:'doughnut', data:{labels:catLabels, datasets:[{data:catData, backgroundColor:['#0A1931','#5B6B7D','#8C97A6','#C7D2DC','#1F3350','#3A4A5C','#9AA5B1','#070F1F']}]}, options:{plugins:{legend:{position:'bottom', labels:{color:getCssVar('--text'), boxWidth:10, font:{size:10}}}}}});
+    }
+  }
+}
+function getCssVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim() || '#888'; }
+
+/* ---------- Profile screen ---------- */
+function renderProfileScreenInline(){
+  const s = STATE.settings;
+  const currentUser = STATE.users.find(u=>u.id===CURRENT_USER_ID);
+  const userLabel = currentUser ? (currentUser.name || currentUser.phone || currentUser.email) : '';
+  return `<div class="section">
+    <div class="profile-row">
+      <div class="avatar">${(s.businessName||'S').charAt(0).toUpperCase()}</div>
+      <div style="flex:1;">
+        <div style="font-weight:700; font-family:var(--font-display); font-size:16px;">${escapeHtml(s.businessName||'My Shop')}</div>
+        <div style="font-size:12px; color:var(--text-muted);">${t(s.role||'owner')}${userLabel? ' · '+escapeHtml(userLabel):''}</div>
+      </div>
+      <button class="link-btn" data-edit-profile="1">${t('edit')}</button>
+    </div>
+    <div style="background:var(--surface); border-radius:var(--radius); padding:6px 14px; border:1px solid var(--border);">
+      <div class="settings-item"><div class="settings-label">🌙 ${t('theme')}</div><button class="switch ${s.dark?'on':''}" id="darkSwitch"></button></div>
+      <div class="settings-item"><div class="settings-label">🌐 ${t('language')}</div>
+        <div class="lang-toggle-alt">
+          <button class="lang-btn-alt ${LANG==='en'?'active':''}" data-lang-switch="en">EN</button>
+          <button class="lang-btn-alt ${LANG==='ta'?'active':''}" data-lang-switch="ta">தமிழ்</button>
+        </div>
+      </div>
+      <div class="settings-item"><div class="settings-label">💱 ${t('currency')}</div><div style="color:var(--text-muted); font-size:13px;">${s.currency}</div></div>
+    </div>
+    <div style="margin-top:14px; background:var(--surface); border-radius:var(--radius); padding:6px 14px; border:1px solid var(--border);">
+      <div class="settings-item" id="shareClosingBtn"><div class="settings-label">📤 ${t('closingReport')}</div><span>›</span></div>
+      <div class="settings-item" id="toggleAdvancedBtn"><div class="settings-label">⚙️ ${t('advancedSettings')}</div><span>${PROFILE_SHOW_ADVANCED?'▾':'›'}</span></div>
+    </div>
+    ${!PROFILE_SHOW_ADVANCED ? `<div style="font-size:11px; color:var(--text-faint); text-align:center; margin-top:8px;">${t('basicNote')}</div>` : ''}
+    ${PROFILE_SHOW_ADVANCED ? `
+    <div style="margin-top:14px; background:var(--surface); border-radius:var(--radius); padding:6px 14px; border:1px solid var(--border);">
+      <div class="settings-item"><div class="settings-label">🔔 ${t('notifications')}</div><button class="switch ${s.notifOptIn?'on':''}" id="notifSwitch"></button></div>
+      <div class="settings-item"><div class="settings-label">🔐 ${t('appLock')}</div><button class="switch ${s.pinEnabled?'on':''}" id="pinSwitch"></button></div>
+      <div class="settings-item" style="flex-direction:column; align-items:flex-start; gap:10px;">
+        <div class="settings-label">🎨 App Color</div>
+        <div style="display:flex; gap:12px;">
+          ${Object.keys(THEME_PRESETS).map(id=>{
+            const p = THEME_PRESETS[id];
+            const active = (s.themeAccent||'navy')===id;
+            return `<button data-theme-accent="${id}" title="${p.label}" style="width:34px; height:34px; border-radius:50%; background:${p.swatch}; border:${active? '3px solid var(--gold)':'2px solid var(--border)'}; box-shadow:${active? '0 0 0 2px var(--surface), 0 0 0 4px var(--gold)':'none'}; cursor:pointer; padding:0;"></button>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:14px; background:var(--surface); border-radius:var(--radius); padding:6px 14px; border:1px solid var(--border);">
+      <div class="settings-item" id="manageCatBtn"><div class="settings-label">🏷️ ${t('manageCategories')}</div><span>›</span></div>
+      <div class="settings-item" id="manageBudgetBtn"><div class="settings-label">🎯 ${t('budgets')}</div><span>›</span></div>
+      <div class="settings-item" id="manageRecurringBtn"><div class="settings-label">🔁 ${t('manageRecurring')}</div><span>›</span></div>
+      <div class="settings-item" id="pdfReportBtn"><div class="settings-label">📄 ${t('pdfExport')}</div><span>›</span></div>
+      <div class="settings-item" id="backupBtn"><div class="settings-label">☁️ ${t('backup')}</div><span>›</span></div>
+      <div class="settings-item" id="restoreBtn"><div class="settings-label">📂 ${t('restore')}</div><span>›</span></div>
+      <div class="settings-item" id="replayTutorialBtn"><div class="settings-label">🧭 ${t('replayTutorial')}</div><span>›</span></div>
+    </div>
+    ${PROFILE_SHOW_CATS ? renderCategoryManager() : ''}
+    ${PROFILE_SHOW_BUDGETS ? renderBudgetManager() : ''}
+    ${PROFILE_SHOW_RECURRING ? renderRecurringManager() : ''}
+    ` : ''}
+    <button class="btn-secondary" style="margin-top:16px; color:var(--expense);" id="logoutBtn">🚪 ${t('logout')}</button>
+    <input type="file" id="restoreFile" accept="application/json" style="display:none;">
+  </div>`;
+}
+
+let PROFILE_SHOW_ADVANCED = false;
+let PROFILE_SHOW_CATS = false;
+function renderCategoryManager(){
+  return `<div style="margin-top:14px; background:var(--surface); border-radius:var(--radius); padding:10px 14px; border:1px solid var(--border);">
+    <div style="font-weight:700; font-size:13px; margin-bottom:6px;">${t('moneyIn')}</div>
+    ${(STATE.settings.customCatsIn||[]).map(c=>`<div class="cat-manage-row"><span>${escapeHtml(c)}</span><button class="cat-del" data-del-cat="in:${escapeAttr(c)}">✕</button></div>`).join('') || `<div style="font-size:12px; color:var(--text-faint); padding:6px 0;">—</div>`}
+    <div style="font-weight:700; font-size:13px; margin:12px 0 6px;">${t('moneyOut')}</div>
+    ${(STATE.settings.customCatsOut||[]).map(c=>`<div class="cat-manage-row"><span>${escapeHtml(c)}</span><button class="cat-del" data-del-cat="out:${escapeAttr(c)}">✕</button></div>`).join('') || `<div style="font-size:12px; color:var(--text-faint); padding:6px 0;">—</div>`}
+  </div>`;
+}
+
+/* ---------- Budgets ---------- */
+let PROFILE_SHOW_BUDGETS = false;
+function renderBudgetManager(){
+  const cats = getCatsOut();
+  return `<div style="margin-top:14px; background:var(--surface); border-radius:var(--radius); padding:10px 14px; border:1px solid var(--border);">
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">${t('setBudget')}</div>
+    ${cats.map(c=>`<div class="cat-manage-row">
+      <span>${escapeHtml(c)}</span>
+      <input class="budget-input" type="number" min="0" inputmode="numeric" data-budget-cat="${escapeAttr(c)}" value="${STATE.settings.budgets[c]||''}" placeholder="${t('noBudget')}">
+    </div>`).join('')}
+  </div>`;
+}
+function monthKey(){ return new Date().toISOString().slice(0,7); }
+function monthSpendByCategory(cat){
+  const mk = monthKey();
+  return STATE.transactions.filter(x=>x.type==='out' && x.category===cat && x.date.slice(0,7)===mk).reduce((s,x)=>s+Number(x.amount),0);
+}
+function renderBudgetProgress(){
+  const budgets = STATE.settings.budgets || {};
+  const cats = Object.keys(budgets).filter(c=> Number(budgets[c])>0);
+  if(!cats.length) return '';
+  return `<div class="chart-card"><h4>🎯 ${t('budgets')}</h4>
+    ${cats.map(c=>{
+      const limit = Number(budgets[c]);
+      const spent = monthSpendByCategory(c);
+      const pct = Math.min(100, Math.round((spent/limit)*100));
+      const over = spent > limit;
+      const color = over? 'var(--expense)' : pct>=80? 'var(--gold)' : 'var(--income)';
+      return `<div class="budget-row">
+        <div class="budget-row-top"><span>${escapeHtml(c)}</span><span>${fmtMoney(spent)} / ${fmtMoney(limit)}</span></div>
+        <div class="budget-progress"><div class="budget-progress-fill" style="width:${pct}%; background:${color}"></div></div>
+        ${over? `<div class="budget-warn" style="color:var(--expense)">⚠️ ${t('overBudget')}</div>` : pct>=80? `<div class="budget-warn" style="color:var(--gold)">${t('nearBudget')} — ${pct}% ${t('ofBudget')}</div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/* ---------- Recurring bills ---------- */
+let PROFILE_SHOW_RECURRING = false;
+function currentPeriodKey(freq){
+  const d = new Date();
+  if(freq==='weekly'){
+    const onejan = new Date(d.getFullYear(),0,1);
+    const week = Math.ceil((((d - onejan) / 86400000) + onejan.getDay()+1)/7);
+    return d.getFullYear()+'-W'+week;
+  }
+  return d.toISOString().slice(0,7); // YYYY-MM for monthly
+}
+function dueRecurring(){
+  return STATE.recurring.filter(r=> r.lastAddedPeriod !== currentPeriodKey(r.frequency));
+}
+function renderRecurringSection(){
+  const due = dueRecurring();
+  if(!due.length) return '';
+  return `<div class="section">
+    <div class="section-title">🔁 ${t('recurring')}</div>
+    ${due.map(r=>`<div class="recurring-card">
+      <div class="recurring-ico" style="background:${r.type==='in'?'var(--income-light)':'var(--expense-light)'}">${r.type==='in'?ICO.in:ICO.out}</div>
+      <div class="recurring-mid"><div class="recurring-title">${escapeHtml(r.label)}</div><div class="recurring-sub">${fmtMoney(r.amount)} · ${t(r.frequency)}</div></div>
+      <button class="recurring-add" data-add-recurring="${r.id}">+ ${t('added')}</button>
+    </div>`).join('')}
+  </div>`;
+}
+function renderRecurringManager(){
+  return `<div style="margin-top:14px; background:var(--surface); border-radius:var(--radius); padding:10px 14px; border:1px solid var(--border);">
+    ${STATE.recurring.length? STATE.recurring.map(r=>`<div class="recur-manage-row">
+      <span>${escapeHtml(r.label)} — ${fmtMoney(r.amount)} (${t(r.frequency)})</span>
+      <button class="cat-del" data-del-recurring="${r.id}">✕</button>
+    </div>`).join('') : `<div style="font-size:12px; color:var(--text-faint); padding:6px 0;">${t('noRecurring')}</div>`}
+    <button class="btn-secondary" style="margin-top:12px;" id="addRecurringBtn">+ ${t('addRecurring')}</button>
+  </div>`;
+}
+
+/* ---------- Bottom nav / FAB ---------- */
+function renderBottomNav(){
+  const items = [
+    {k:'home', ico:ICO.home, label:t('home')},
+    {k:'transactions', ico:ICO.tx, label:t('transactions')},
+    {k:'credit', ico:ICO.cr2, label:t('credit')},
+    {k:'reports', ico:ICO.rep, label:t('reports')},
+    {k:'profile', ico:ICO.prof, label:t('profile')},
+  ];
+  return `<div class="bottom-nav">
+    ${items.map(i=>`<button class="nav-btn ${ROUTE===i.k?'active':''}" data-nav="${i.k}"><span class="nav-ico">${i.ico}</span>${i.label}</button>`).join('')}
+  </div>`;
+}
+
+/* ---------- Screens (full-page overlays for entry forms) ---------- */
+let FORM = { amount:'', category:'', person:'', phone:'', notes:'', catList:[], editId:null, photo:null, showAddCat:false };
+function resetForm(catList){ FORM = { amount:'', category:'', person:'', phone:'', notes:'', catList: catList||[], editId:null, photo:null, showAddCat:false }; }
+
+function renderScreenHost(){
+  if(!OPEN_SCREEN) return '';
+  if(OPEN_SCREEN==='moneyIn') return renderEntryScreen('in');
+  if(OPEN_SCREEN==='moneyOut') return renderEntryScreen('out');
+  if(OPEN_SCREEN==='creditGiven') return renderCreditFormScreen('given');
+  if(OPEN_SCREEN==='creditReceived') return renderCreditFormScreen('received');
+  if(OPEN_SCREEN==='txDetail') return renderTxDetailScreen();
+  if(OPEN_SCREEN==='recordPayment') return renderRecordPaymentScreen();
+  if(OPEN_SCREEN==='editProfile') return renderEditProfileScreen();
+  if(OPEN_SCREEN==='creditDetail') return renderCreditDetailScreen();
+  if(OPEN_SCREEN==='addRecurring') return renderAddRecurringScreen();
+  return '';
+}
+
+function renderEntryScreen(type){
+  const isIn = type==='in';
+  const cats = isIn? getCatsIn() : getCatsOut();
+  const isEdit = !!FORM.editId;
+  return `<div class="screen open">
+    <div class="screen-header">
+      <button class="back-btn" id="screenBack">${ICO.back}</button>
+      <div class="screen-title">${isEdit? t('editTx') : (isIn? t('moneyIn'): t('moneyOut'))}</div>
+    </div>
+    <div class="screen-body">
+      <div class="amount-display"><span class="cur">${STATE.settings.currency}</span><span class="amt" id="amtDisplay">${FORM.amount||'0'}</span><button class="mic-btn" id="voiceBtn" title="${t('speakAmount')}">${ICO.mic}</button></div>
+      <div class="field">
+        <label>${t('category')}</label>
+        <div class="chip-row">
+          ${cats.map(c=>`<button class="chip ${FORM.category===c?'selected':''}" data-setcat="${escapeAttr(c)}">${c}</button>`).join('')}
+          <button class="chip add-chip" id="addCatChip">+ ${t('addCategory')}</button>
+        </div>
+        ${FORM.showAddCat ? `<div class="field-wrap" style="margin-top:10px; display:flex; gap:8px;">
+          <input id="newCatInput" placeholder="${t('newCategory')}" style="flex:1; padding:11px 14px; border-radius:12px; border:1.5px solid var(--border); background:var(--surface); color:var(--text);">
+          <button class="btn-primary" style="width:auto; padding:0 16px;" id="saveCatBtn" data-type="${type}">${t('save')}</button>
+        </div>` : ''}
+      </div>
+      <div class="field field-wrap">
+        <label>${isIn? t('customer') : t('vendor')}</label>
+        <input id="personInput" placeholder="${isIn? t('customer'): t('vendor')}" value="${escapeAttr(FORM.person)}">
+      </div>
+      <div class="field">
+        <label>${t('notes')}</label>
+        <textarea id="notesInput" rows="2" placeholder="${t('notes')}">${escapeHtml(FORM.notes)}</textarea>
+      </div>
+      ${!isIn? `<div class="field"><label>${t('receiptPhoto')}</label>
+        <button class="btn-secondary" style="margin-top:0;" id="receiptBtn">📷 ${t('receiptPhoto')}</button>
+        <input type="file" id="receiptFile" accept="image/*" capture="environment" style="display:none;">
+        ${FORM.photo? `<div class="photo-preview"><img src="${FORM.photo}"><button class="photo-remove" id="removePhotoBtn">✕</button></div>`:''}
+      </div>` : ''}
+      <div class="keypad" id="keypad">
+        ${['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k=>`<button class="key ${k==='⌫'?'fn':''}" data-key="${k}">${k}</button>`).join('')}
+      </div>
+      <div class="btn-row" style="margin-top:18px;">
+        ${isEdit ? '' : `<button class="btn-secondary" id="saveAddAnother">${t('saveAdd')}</button>`}
+        <button class="btn-primary" id="saveEntry" data-type="${type}">${isEdit? t('update') : t('save')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCreditFormScreen(kind){
+  const isGiven = kind==='given';
+  return `<div class="screen open">
+    <div class="screen-header">
+      <button class="back-btn" id="screenBack">${ICO.back}</button>
+      <div class="screen-title">${isGiven? t('creditGiven'): t('creditReceived')}</div>
+    </div>
+    <div class="screen-body">
+      <div class="amount-display"><span class="cur">${STATE.settings.currency}</span><span class="amt" id="amtDisplay">${FORM.amount||'0'}</span><button class="mic-btn" id="voiceBtn" title="${t('speakAmount')}">${ICO.mic}</button></div>
+      <div class="field">
+        <label>${t('customer')}</label>
+        <input id="personInput" placeholder="${t('customer')}" value="${escapeAttr(FORM.person)}">
+      </div>
+      <div class="field">
+        <label>${t('phone')}</label>
+        <input id="phoneInput" type="tel" placeholder="${t('phone')}" value="${escapeAttr(FORM.phone)}">
+      </div>
+      <div class="field">
+        <label>${t('notes')}</label>
+        <textarea id="notesInput" rows="2" placeholder="${t('notes')}">${escapeHtml(FORM.notes)}</textarea>
+      </div>
+      <div class="keypad" id="keypad">
+        ${['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k=>`<button class="key ${k==='⌫'?'fn':''}" data-key="${k}">${k}</button>`).join('')}
+      </div>
+      <div class="btn-row" style="margin-top:18px;">
+        <button class="btn-secondary" id="saveCreditAddAnother" data-kind="${kind}">${t('saveAdd')}</button>
+        <button class="btn-primary" id="saveCredit" data-kind="${kind}">${t('save')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderTxDetailScreen(){
+  const x = STATE.transactions.find(t=>t.id===SCREEN_CTX.id);
+  if(!x) return '';
+  const isIn = x.type==='in';
+  const locked = !can('addTransaction') && STATE.settings.role!=='owner';
+  return `<div class="screen open">
+    <div class="screen-header"><button class="back-btn" id="screenBack">${ICO.back}</button><div class="screen-title">${isIn?t('moneyIn'):t('moneyOut')}</div></div>
+    <div class="screen-body">
+      <div class="amount-display"><span class="cur">${STATE.settings.currency}</span><span class="amt" style="color:${isIn?'var(--income)':'var(--expense)'}">${x.amount}</span></div>
+      ${STATE.settings.gstRate>0 ? (()=>{ const g = gstBreakup(x.amount); return `<div class="stat-grid">
+        <div class="stat-box"><div class="lbl">${t('taxableValue')}</div><div class="v" style="font-size:14px;">${fmtMoney(g.taxable)}</div></div>
+        <div class="stat-box"><div class="lbl">${t('gstAmount')} (${g.rate}%)</div><div class="v" style="font-size:14px;">${fmtMoney(g.gst)}</div></div>
+      </div>`; })() : ''}
+      <div class="stat-grid">
+        <div class="stat-box"><div class="lbl">${t('category')}</div><div class="v" style="font-size:14px;">${escapeHtml(x.category)}</div></div>
+        <div class="stat-box"><div class="lbl">${t('date')}</div><div class="v" style="font-size:14px;">${fmtDate(x.date)} ${x.time||''}</div></div>
+      </div>
+      ${x.person? `<div class="field"><label>${t('customer')}</label><div>${escapeHtml(x.person)}</div></div>`:''}
+      ${x.notes? `<div class="field"><label>${t('notes')}</label><div>${escapeHtml(x.notes)}</div></div>`:''}
+      ${x.photo? `<div class="field"><label>${t('receiptPhoto')}</label><div class="photo-preview" style="width:120px; height:120px;"><img src="${x.photo}"></div></div>`:''}
+      ${locked ? `<div style="font-size:12px; color:var(--text-muted); margin-top:10px;">${t('staffLocked')}</div>` : `
+      <div class="btn-row" style="margin-top:20px;">
+        <button class="btn-secondary" id="editTxBtn" data-id="${x.id}">✏️ ${t('edit')}</button>
+        <button class="btn-secondary" id="deleteTxBtn" data-id="${x.id}" style="color:var(--expense);">🗑️ ${t('delete')}</button>
+      </div>`}
+    </div>
+  </div>`;
+}
+
+function renderRecordPaymentScreen(){
+  const c = STATE.credits.find(cr=>cr.id===SCREEN_CTX.id);
+  if(!c) return '';
+  const paid = creditPaidAmount(c.id);
+  const rem = Math.max(Number(c.amount)-paid,0);
+  return `<div class="screen open">
+    <div class="screen-header"><button class="back-btn" id="screenBack">${ICO.back}</button><div class="screen-title">${t('recordPayment')}</div></div>
+    <div class="screen-body">
+      <div style="text-align:center; color:var(--text-muted); font-size:13px; margin-bottom:6px;">${escapeHtml(c.customer)} · ${t('balanceRemaining')}: ${fmtMoney(rem)}</div>
+      <div class="amount-display"><span class="cur">${STATE.settings.currency}</span><span class="amt" id="amtDisplay">${FORM.amount||'0'}</span><button class="mic-btn" id="voiceBtn" title="${t('speakAmount')}">${ICO.mic}</button></div>
+      <div class="keypad" id="keypad">
+        ${['1','2','3','4','5','6','7','8','9','.','0','⌫'].map(k=>`<button class="key ${k==='⌫'?'fn':''}" data-key="${k}">${k}</button>`).join('')}
+      </div>
+      <div class="btn-row" style="margin-top:18px;">
+        <button class="btn-secondary" id="savePaymentAddAnother" data-id="${c.id}">${t('saveAdd')}</button>
+        <button class="btn-primary" id="savePayment" data-id="${c.id}">${t('save')}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderCreditDetailScreen(){
+  const c = STATE.credits.find(cr=>cr.id===SCREEN_CTX.id);
+  if(!c) return '';
+  const hist = STATE.payments.filter(p=>p.creditId===c.id).sort((a,b)=>b.ts-a.ts);
+  const paid = creditPaidAmount(c.id);
+  const rem = Math.max(Number(c.amount)-paid,0);
+  return `<div class="screen open">
+    <div class="screen-header"><button class="back-btn" id="screenBack">${ICO.back}</button><div class="screen-title">${escapeHtml(c.customer)}</div></div>
+    <div class="screen-body">
+      <div class="stat-grid">
+        <div class="stat-box"><div class="lbl">${t('amount')}</div><div class="v">${fmtMoney(c.amount)}</div></div>
+        <div class="stat-box"><div class="lbl">${rem<=0? t('fullyPaid') : t('remaining')}</div><div class="v" style="color:${rem<=0?'var(--income)':'var(--gold)'}">${rem<=0? '✓' : fmtMoney(rem)}</div></div>
+      </div>
+      ${c.phone? `<div class="action-row-sm">
+        <a class="action-btn-sm" href="tel:${escapeAttr(c.phone)}">📞 ${t('call')}</a>
+        <button class="action-btn-sm" data-remind="${c.id}">💬 ${t('remindWA')}</button>
+      </div>` : ''}
+      ${c.notes? `<div class="field" style="margin-top:16px;"><label>${t('notes')}</label><div>${escapeHtml(c.notes)}</div></div>`:''}
+      <div class="field" style="margin-top:16px;">
+        <label>${t('paymentHistory')}</label>
+        ${hist.length? `<div style="background:var(--surface); border-radius:var(--radius-sm); padding:6px 14px; border:1px solid var(--border);">
+          ${hist.map(p=>`<div class="payment-hist-item"><span>${fmtDate(p.date)}</span><span style="font-weight:700; color:var(--income);">+${fmtMoney(p.amount)}</span></div>`).join('')}
+        </div>` : `<div style="font-size:13px; color:var(--text-muted);">${t('noPayments')}</div>`}
+      </div>
+      ${rem>0 && c.type==='given' && can('addTransaction') ? `<button class="btn-primary" style="margin-top:18px;" data-record-payment="${c.id}">${t('recordPayment')}</button>` : ''}
+      ${STATE.settings.role==='owner' ? `<button class="btn-secondary" id="deleteCreditBtn" data-id="${c.id}" style="margin-top:12px; color:var(--expense);">🗑️ ${t('delete')}</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function renderEditProfileScreen(){
+  const s = STATE.settings;
+  return `<div class="screen open">
+    <div class="screen-header"><button class="back-btn" id="screenBack">${ICO.back}</button><div class="screen-title">${t('profile')}</div></div>
+    <div class="screen-body">
+      <div class="field"><label>${t('businessName')}</label><input id="editBizName" value="${escapeAttr(s.businessName)}"></div>
+      <div class="field"><label>${t('address')}</label><input id="editAddress" value="${escapeAttr(s.address||'')}"></div>
+      <div class="field"><label>${t('phone')}</label><input id="editPhone" value="${escapeAttr(s.phone||'')}"></div>
+      <div class="field"><label>${t('currency')}</label>
+        <select id="editCurrency">
+          <option value="₹" ${s.currency==='₹'?'selected':''}>₹ INR</option>
+          <option value="$" ${s.currency==='$'?'selected':''}>$ USD</option>
+          <option value="€" ${s.currency==='€'?'selected':''}>€ EUR</option>
+        </select>
+      </div>
+      <div class="field"><label>${t('role')}</label>
+        <select id="editRole">
+          <option value="owner" ${s.role==='owner'?'selected':''}>${t('owner')}</option>
+          <option value="staff" ${s.role==='staff'?'selected':''}>${t('staff')}</option>
+          <option value="accountant" ${s.role==='accountant'?'selected':''}>${t('accountant')}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>${t('gstRate')}</label>
+        <input id="editGstRate" type="number" min="0" max="28" step="0.1" placeholder="e.g. 18" value="${s.gstRate!=null && s.gstRate!=='' ? escapeAttr(String(s.gstRate)) : ''}">
+        <div style="font-size:11px; color:var(--text-muted); margin-top:6px;">${t('gstRateHint')}</div>
+      </div>
+      <button class="btn-primary" id="saveProfileBtn">${t('save')}</button>
+    </div>
+  </div>`;
+}
+
+let RECUR_FORM = { type:'out', label:'', category:'', amount:'', frequency:'monthly' };
+function resetRecurForm(){ RECUR_FORM = { type:'out', label:'', category:'', amount:'', frequency:'monthly' }; }
+function renderAddRecurringScreen(){
+  const cats = RECUR_FORM.type==='in' ? getCatsIn() : getCatsOut();
+  return `<div class="screen open">
+    <div class="screen-header"><button class="back-btn" id="screenBack">${ICO.back}</button><div class="screen-title">${t('addRecurring')}</div></div>
+    <div class="screen-body">
+      <div class="pill-tab-row">
+        <button class="pill-tab ${RECUR_FORM.type==='out'?'active':''}" data-recurtype="out">${t('moneyOut')}</button>
+        <button class="pill-tab ${RECUR_FORM.type==='in'?'active':''}" data-recurtype="in">${t('moneyIn')}</button>
+      </div>
+      <div class="field"><label>${t('recurringLabel')}</label><input id="recurLabelInput" value="${escapeAttr(RECUR_FORM.label)}" placeholder="${t('recurringLabel')}"></div>
+      <div class="field"><label>${t('category')}</label>
+        <div class="chip-row">${cats.map(c=>`<button class="chip ${RECUR_FORM.category===c?'selected':''}" data-recurcat="${escapeAttr(c)}">${c}</button>`).join('')}</div>
+      </div>
+      <div class="field"><label>${t('amount')}</label><input id="recurAmountInput" type="number" min="0" inputmode="numeric" value="${escapeAttr(RECUR_FORM.amount)}" placeholder="0"></div>
+      <div class="field"><label>${t('frequency')}</label>
+        <select id="recurFreqInput">
+          <option value="monthly" ${RECUR_FORM.frequency==='monthly'?'selected':''}>${t('monthly')}</option>
+          <option value="weekly" ${RECUR_FORM.frequency==='weekly'?'selected':''}>${t('weekly')}</option>
+        </select>
+      </div>
+      <button class="btn-primary" id="saveRecurringBtn">${t('save')}</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- Helpers ---------- */
+function escapeHtml(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function escapeAttr(s){ return escapeHtml(s); }
+
+/* ---------- Event delegation ---------- */
+function attachHandlers(){
+  const root = document.getElementById('root');
+
+  const tutSkipBtn = document.getElementById('tutSkipBtn');
+  if(tutSkipBtn) tutSkipBtn.addEventListener('click', ()=>{ STATE.settings.tutorialSeen = true; TUTORIAL_STEP = 0; persist(); render(); });
+  const tutNextBtn = document.getElementById('tutNextBtn');
+  if(tutNextBtn) tutNextBtn.addEventListener('click', ()=>{
+    if(TUTORIAL_STEP < TUTORIAL_STEPS.length-1){ TUTORIAL_STEP++; render(); }
+    else { STATE.settings.tutorialSeen = true; TUTORIAL_STEP = 0; persist(); render(); }
+  });
+
+  root.querySelectorAll('[data-nav]').forEach(el=> el.addEventListener('click', ()=> navigate(el.getAttribute('data-nav'))));
+  root.querySelectorAll('[data-open]').forEach(el=> el.addEventListener('click', ()=>{
+    const name = el.getAttribute('data-open');
+    resetForm();
+    openScreen(name);
+  }));
+  root.querySelectorAll('[data-lang-switch]').forEach(el=> el.addEventListener('click', ()=>{
+    LANG = el.getAttribute('data-lang-switch');
+    localStorage.setItem('ll_lang', LANG);
+    render();
+  }));
+  const themeBtn = document.getElementById('themeToggle');
+  if(themeBtn) themeBtn.addEventListener('click', ()=>{ STATE.settings.dark=!STATE.settings.dark; persist(); render(); });
+
+  root.querySelectorAll('[data-tx-detail]').forEach(el=> el.addEventListener('click', ()=> openScreen('txDetail', {id: el.getAttribute('data-tx-detail')})));
+  attachCreditCardHandlers(root);
+
+  // transactions screen
+  const txSearch = document.getElementById('txSearch');
+  if(txSearch) txSearch.addEventListener('input', (e)=>{ TX_FILTER.search = e.target.value; updateTxListView(); });
+  root.querySelectorAll('[data-txfilter]').forEach(el=> el.addEventListener('click', ()=>{ TX_FILTER.type = el.getAttribute('data-txfilter'); render(); }));
+
+  // credit tabs
+  root.querySelectorAll('[data-credittab]').forEach(el=> el.addEventListener('click', ()=>{ CREDIT_TAB = el.getAttribute('data-credittab'); render(); }));
+  const creditSearch = document.getElementById('creditSearch');
+  if(creditSearch) creditSearch.addEventListener('input', e=>{ CREDIT_SEARCH = e.target.value; updateCreditListView(); });
+
+  // reports
+  root.querySelectorAll('[data-range]').forEach(el=> el.addEventListener('click', ()=>{ REPORT_RANGE = el.getAttribute('data-range'); render(); }));
+  const exportBtn = document.getElementById('exportCsvBtn');
+  if(exportBtn) exportBtn.addEventListener('click', exportCsv);
+  if(ROUTE==='reports') setTimeout(drawCharts, 30);
+
+  // profile
+  const darkSwitch = document.getElementById('darkSwitch');
+  if(darkSwitch) darkSwitch.addEventListener('click', ()=>{ STATE.settings.dark=!STATE.settings.dark; persist(); render(); });
+  root.querySelectorAll('[data-theme-accent]').forEach(el=> el.addEventListener('click', ()=>{
+    STATE.settings.themeAccent = el.getAttribute('data-theme-accent'); persist(); render();
+  }));
+  const replayTutorialBtn = document.getElementById('replayTutorialBtn');
+  if(replayTutorialBtn) replayTutorialBtn.addEventListener('click', ()=>{
+    STATE.settings.tutorialSeen = false; TUTORIAL_STEP = 0; navigate('home'); render();
+  });
+  const backupBtn = document.getElementById('backupBtn');
+  if(backupBtn) backupBtn.addEventListener('click', doBackup);
+  const restoreBtn = document.getElementById('restoreBtn');
+  const restoreFile = document.getElementById('restoreFile');
+  if(restoreBtn) restoreBtn.addEventListener('click', ()=> restoreFile.click());
+  if(restoreFile) restoreFile.addEventListener('change', doRestore);
+  const logoutBtn = document.getElementById('logoutBtn');
+  if(logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+  const shareBtn = document.getElementById('shareClosingBtn');
+  if(shareBtn) shareBtn.addEventListener('click', shareClosing);
+  root.querySelectorAll('[data-edit-profile]').forEach(el=> el.addEventListener('click', ()=> openScreen('editProfile')));
+
+  const manageCatBtn = document.getElementById('manageCatBtn');
+  if(manageCatBtn) manageCatBtn.addEventListener('click', ()=>{ PROFILE_SHOW_CATS = !PROFILE_SHOW_CATS; render(); });
+  const toggleAdvancedBtn = document.getElementById('toggleAdvancedBtn');
+  if(toggleAdvancedBtn) toggleAdvancedBtn.addEventListener('click', ()=>{ PROFILE_SHOW_ADVANCED = !PROFILE_SHOW_ADVANCED; render(); });
+  root.querySelectorAll('[data-del-cat]').forEach(el=> el.addEventListener('click', ()=>{
+    const [kind, name] = el.getAttribute('data-del-cat').split(':');
+    const key = kind==='in' ? 'customCatsIn' : 'customCatsOut';
+    STATE.settings[key] = STATE.settings[key].filter(c=>c!==name);
+    persist(); render();
+  }));
+  const pdfReportBtn = document.getElementById('pdfReportBtn');
+  if(pdfReportBtn) pdfReportBtn.addEventListener('click', exportDailyClosingPdf);
+  const notifSwitch = document.getElementById('notifSwitch');
+  if(notifSwitch) notifSwitch.addEventListener('click', toggleNotifications);
+  const pinSwitch = document.getElementById('pinSwitch');
+  if(pinSwitch) pinSwitch.addEventListener('click', ()=>{
+    if(STATE.settings.pinEnabled) startDisablePin(); else startCreatePin();
+  });
+
+  const manageBudgetBtn = document.getElementById('manageBudgetBtn');
+  if(manageBudgetBtn) manageBudgetBtn.addEventListener('click', ()=>{ PROFILE_SHOW_BUDGETS = !PROFILE_SHOW_BUDGETS; render(); });
+  root.querySelectorAll('[data-budget-cat]').forEach(el=> el.addEventListener('change', (e)=>{
+    const cat = el.getAttribute('data-budget-cat');
+    const val = parseFloat(e.target.value);
+    STATE.settings.budgets[cat] = isNaN(val) || val<=0 ? undefined : val;
+    persist();
+  }));
+
+  const manageRecurringBtn = document.getElementById('manageRecurringBtn');
+  if(manageRecurringBtn) manageRecurringBtn.addEventListener('click', ()=>{ PROFILE_SHOW_RECURRING = !PROFILE_SHOW_RECURRING; render(); });
+  const addRecurringBtn = document.getElementById('addRecurringBtn');
+  if(addRecurringBtn) addRecurringBtn.addEventListener('click', ()=>{ resetRecurForm(); openScreen('addRecurring'); });
+  root.querySelectorAll('[data-del-recurring]').forEach(el=> el.addEventListener('click', ()=>{
+    STATE.recurring = STATE.recurring.filter(r=>r.id!==el.getAttribute('data-del-recurring'));
+    persist(); render();
+  }));
+  root.querySelectorAll('[data-add-recurring]').forEach(el=> el.addEventListener('click', ()=> handleAddRecurringNow(el.getAttribute('data-add-recurring'))));
+
+  // recurring template form
+  root.querySelectorAll('[data-recurtype]').forEach(el=> el.addEventListener('click', ()=>{ RECUR_FORM.type = el.getAttribute('data-recurtype'); RECUR_FORM.category=''; render(); }));
+  root.querySelectorAll('[data-recurcat]').forEach(el=> el.addEventListener('click', ()=>{ RECUR_FORM.category = el.getAttribute('data-recurcat'); render(); }));
+  const recurLabelInput = document.getElementById('recurLabelInput');
+  if(recurLabelInput) recurLabelInput.addEventListener('input', e=> RECUR_FORM.label = e.target.value);
+  const recurAmountInput = document.getElementById('recurAmountInput');
+  if(recurAmountInput) recurAmountInput.addEventListener('input', e=> RECUR_FORM.amount = e.target.value);
+  const recurFreqInput = document.getElementById('recurFreqInput');
+  if(recurFreqInput) recurFreqInput.addEventListener('change', e=> RECUR_FORM.frequency = e.target.value);
+  const saveRecurringBtn = document.getElementById('saveRecurringBtn');
+  if(saveRecurringBtn) saveRecurringBtn.addEventListener('click', handleSaveRecurring);
+
+  // ---- screen-level handlers ----
+  const backBtn = document.getElementById('screenBack');
+  if(backBtn) backBtn.addEventListener('click', closeScreen);
+
+  // keypad
+  const voiceBtn = document.getElementById('voiceBtn');
+  if(voiceBtn) voiceBtn.addEventListener('click', ()=>{
+    voiceBtn.classList.add('listening');
+    showToast(t('listenNow'));
+    tryVoiceInput((transcript)=>{
+      voiceBtn.classList.remove('listening');
+      const match = (transcript.match(/[\d]+(\.[\d]+)?/) || [])[0];
+      if(match){
+        FORM.amount = match.length<9 ? match : match.slice(0,9);
+        const disp = document.getElementById('amtDisplay');
+        if(disp) disp.textContent = FORM.amount;
+      } else {
+        showToast(LANG==='ta' ? 'தொகையை புரிந்துகொள்ள முடியவில்லை, தட்டச்சு செய்யவும்' : 'Could not understand the amount, please type it');
+      }
+    });
+  });
+
+  root.querySelectorAll('[data-key]').forEach(el=> el.addEventListener('click', ()=>{
+    const k = el.getAttribute('data-key');
+    if(k==='⌫'){ FORM.amount = FORM.amount.slice(0,-1); }
+    else if(k==='.'){ if(!FORM.amount.includes('.')) FORM.amount += '.'; }
+    else{ if(FORM.amount.length<9) FORM.amount += k; }
+    const disp = document.getElementById('amtDisplay');
+    if(disp) disp.textContent = FORM.amount || '0';
+  }));
+  root.querySelectorAll('[data-setcat]').forEach(el=> el.addEventListener('click', ()=>{ FORM.category = el.getAttribute('data-setcat'); render(); }));
+
+  const addCatChip = document.getElementById('addCatChip');
+  if(addCatChip) addCatChip.addEventListener('click', ()=>{ FORM.showAddCat = !FORM.showAddCat; render(); });
+  const saveCatBtn = document.getElementById('saveCatBtn');
+  if(saveCatBtn) saveCatBtn.addEventListener('click', ()=>{
+    const type = saveCatBtn.getAttribute('data-type');
+    const val = (document.getElementById('newCatInput').value || '').trim();
+    if(!val){ showToast(t('newCategory')); return; }
+    const key = type==='in' ? 'customCatsIn' : 'customCatsOut';
+    if(!STATE.settings[key].includes(val)) STATE.settings[key].push(val);
+    FORM.category = val;
+    FORM.showAddCat = false;
+    persist();
+    render();
+  });
+
+  const receiptFile = document.getElementById('receiptFile');
+  if(receiptFile) receiptFile.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{ FORM.photo = reader.result; render(); showToast(t('photoAdded')); };
+    reader.readAsDataURL(file);
+  });
+  const removePhotoBtn = document.getElementById('removePhotoBtn');
+  if(removePhotoBtn) removePhotoBtn.addEventListener('click', ()=>{ FORM.photo = null; render(); });
+
+  const personInput = document.getElementById('personInput');
+  if(personInput) personInput.addEventListener('input', e=> FORM.person = e.target.value);
+  const phoneInput = document.getElementById('phoneInput');
+  if(phoneInput) phoneInput.addEventListener('input', e=> FORM.phone = e.target.value);
+  const notesInput = document.getElementById('notesInput');
+  if(notesInput) notesInput.addEventListener('input', e=> FORM.notes = e.target.value);
+
+  const receiptBtn = document.getElementById('receiptBtn');
+  if(receiptBtn) receiptBtn.addEventListener('click', ()=>{ const rf = document.getElementById('receiptFile'); if(rf) rf.click(); });
+
+  const editTxBtn = document.getElementById('editTxBtn');
+  if(editTxBtn) editTxBtn.addEventListener('click', ()=> handleEditTxStart(editTxBtn.getAttribute('data-id')));
+
+  const saveEntry = document.getElementById('saveEntry');
+  if(saveEntry) saveEntry.addEventListener('click', ()=> handleSaveEntry(saveEntry.getAttribute('data-type'), false));
+  const saveAddAnother = document.getElementById('saveAddAnother');
+  if(saveAddAnother) saveAddAnother.addEventListener('click', ()=> handleSaveEntry(document.getElementById('saveEntry').getAttribute('data-type'), true));
+
+  const saveCredit = document.getElementById('saveCredit');
+  if(saveCredit) saveCredit.addEventListener('click', ()=> handleSaveCredit(saveCredit.getAttribute('data-kind'), false));
+  const saveCreditAddAnother = document.getElementById('saveCreditAddAnother');
+  if(saveCreditAddAnother) saveCreditAddAnother.addEventListener('click', ()=> handleSaveCredit(saveCreditAddAnother.getAttribute('data-kind'), true));
+
+  const savePayment = document.getElementById('savePayment');
+  if(savePayment) savePayment.addEventListener('click', ()=> handleSavePayment(savePayment.getAttribute('data-id'), false));
+  const savePaymentAddAnother = document.getElementById('savePaymentAddAnother');
+  if(savePaymentAddAnother) savePaymentAddAnother.addEventListener('click', ()=> handleSavePayment(savePaymentAddAnother.getAttribute('data-id'), true));
+
+  const deleteTxBtn = document.getElementById('deleteTxBtn');
+  if(deleteTxBtn) deleteTxBtn.addEventListener('click', ()=> handleDeleteTx(deleteTxBtn.getAttribute('data-id')));
+
+  const deleteCreditBtn = document.getElementById('deleteCreditBtn');
+  if(deleteCreditBtn) deleteCreditBtn.addEventListener('click', ()=> handleDeleteCredit(deleteCreditBtn.getAttribute('data-id')));
+
+  const saveProfileBtn = document.getElementById('saveProfileBtn');
+  if(saveProfileBtn) saveProfileBtn.addEventListener('click', handleSaveProfile);
+}
+
+/* ---------- Handlers: business logic ---------- */
+function validAmount(){ return parseFloat(FORM.amount) > 0; }
+
+function handleSaveEntry(type, addAnother){
+  if(!validAmount()){ showToast(LANG==='ta'?'சரியான தொகையை உள்ளிடவும்':'Please enter a valid amount'); return; }
+  if(!FORM.category){ showToast(LANG==='ta'?'வகையைத் தேர்ந்தெடுக்கவும்':'Please select a category'); return; }
+  const now = new Date();
+  if(FORM.editId){
+    const idx = STATE.transactions.findIndex(x=>x.id===FORM.editId);
+    if(idx>=0){
+      STATE.transactions[idx] = {
+        ...STATE.transactions[idx],
+        amount: parseFloat(FORM.amount), category: FORM.category, person: FORM.person, notes: FORM.notes, photo: FORM.photo
+      };
+      persist();
+      showCheck(t('saved'));
+      setTimeout(()=> navigate('transactions'), 250);
+    }
+    return;
+  }
+  const tx = {
+    id: uid(), type, amount: parseFloat(FORM.amount), category: FORM.category,
+    person: FORM.person, notes: FORM.notes, date: now.toISOString().slice(0,10),
+    time: now.toLocaleTimeString(LANG==='ta'?'ta-IN':'en-IN',{hour:'2-digit',minute:'2-digit'}), ts: now.getTime(),
+    photo: FORM.photo || null
+  };
+  STATE.transactions.push(tx);
+  persist();
+  showCheck(t('saved'));
+  if(addAnother){ resetForm(); setTimeout(()=>{ render(); openScreen(type==='in'?'moneyIn':'moneyOut'); }, 250); }
+  else { setTimeout(()=> navigate('home'), 250); }
+}
+
+function handleEditTxStart(id){
+  const x = STATE.transactions.find(tx=>tx.id===id);
+  if(!x) return;
+  FORM = { amount:String(x.amount), category:x.category, person:x.person||'', phone:'', notes:x.notes||'', catList:[], editId:x.id, photo:x.photo||null, showAddCat:false };
+  openScreen(x.type==='in' ? 'moneyIn' : 'moneyOut');
+}
+
+function handleSaveCredit(kind, addAnother){
+  if(!validAmount()){ showToast(LANG==='ta'?'சரியான தொகையை உள்ளிடவும்':'Please enter a valid amount'); return; }
+  if(!FORM.person){ showToast(LANG==='ta'?'பெயரை உள்ளிடவும்':'Please enter a name'); return; }
+  const now = new Date();
+  const c = {
+    id: uid(), type: kind, customer: FORM.person, phone: FORM.phone, amount: parseFloat(FORM.amount),
+    date: now.toISOString().slice(0,10), notes: FORM.notes, ts: now.getTime()
+  };
+  STATE.credits.push(c);
+  if(kind==='received'){
+    // credit received = money coming back in, also log as income-ish cash inflow via payments ledger against a synthetic self credit is overkill;
+    // simplest correct model: received credit adds directly to cash in hand as a transaction of type 'in' tagged Credit Received
+    STATE.transactions.push({ id: uid(), type:'in', amount: c.amount, category:'Credit Received', person: c.customer, notes: c.notes, date: c.date, time: now.toLocaleTimeString(LANG==='ta'?'ta-IN':'en-IN',{hour:'2-digit',minute:'2-digit'}), ts: now.getTime() });
+  }
+  persist();
+  showCheck(t('saved'));
+  if(addAnother){ resetForm(); setTimeout(()=>{ render(); openScreen(kind==='given'?'creditGiven':'creditReceived'); }, 250); }
+  else { setTimeout(()=> navigate('credit'), 250); }
+}
+
+function handleSavePayment(creditId, addAnother){
+  if(!validAmount()){ showToast(LANG==='ta'?'சரியான தொகையை உள்ளிடவும்':'Please enter a valid amount'); return; }
+  const now = new Date();
+  STATE.payments.push({ id: uid(), creditId, amount: parseFloat(FORM.amount), date: now.toISOString().slice(0,10), ts: now.getTime() });
+  persist();
+  showCheck(t('saved'));
+  if(addAnother){ resetForm(); setTimeout(()=>{ render(); openScreen('recordPayment', {id:creditId}); }, 250); }
+  else { setTimeout(()=> navigate('credit'), 250); }
+}
+
+function handleDeleteTx(id){
+  const idx = STATE.transactions.findIndex(x=>x.id===id);
+  if(idx<0) return;
+  const removed = STATE.transactions[idx];
+  STATE.transactions.splice(idx,1);
+  persist();
+  closeScreen();
+  navigate('transactions');
+  showToast(t('deleted'), t('undo'), ()=>{
+    STATE.transactions.push(removed);
+    persist();
+    render();
+  });
+}
+
+function handleDeleteCredit(id){
+  const idx = STATE.credits.findIndex(c=>c.id===id);
+  if(idx<0) return;
+  const removed = STATE.credits[idx];
+  const removedPayments = STATE.payments.filter(p=>p.creditId===id);
+  // credit received was logged as a synthetic 'in' transaction tagged Credit Received; clean that up too
+  let removedTx = null;
+  if(removed.type==='received'){
+    const txIdx = STATE.transactions.findIndex(x=> x.category==='Credit Received' && x.person===removed.customer && x.amount===removed.amount && x.date===removed.date);
+    if(txIdx>=0){ removedTx = STATE.transactions[txIdx]; STATE.transactions.splice(txIdx,1); }
+  }
+  STATE.credits.splice(idx,1);
+  STATE.payments = STATE.payments.filter(p=>p.creditId!==id);
+  persist();
+  closeScreen();
+  navigate('credit');
+  showToast(t('deleted'), t('undo'), ()=>{
+    STATE.credits.push(removed);
+    STATE.payments.push(...removedPayments);
+    if(removedTx) STATE.transactions.push(removedTx);
+    persist();
+    render();
+  });
+}
+
+function handleSaveProfile(){
+  STATE.settings.businessName = document.getElementById('editBizName').value || 'My Shop';
+  STATE.settings.address = document.getElementById('editAddress').value;
+  STATE.settings.phone = document.getElementById('editPhone').value;
+  STATE.settings.currency = document.getElementById('editCurrency').value;
+  STATE.settings.role = document.getElementById('editRole').value;
+  const gstInput = document.getElementById('editGstRate');
+  if(gstInput){
+    const raw = gstInput.value.trim();
+    if(raw===''){ STATE.settings.gstRate = null; }
+    else {
+      const val = parseFloat(raw);
+      if(isNaN(val) || val<0 || val>28){ showToast(t('enterGstRate')); return; }
+      STATE.settings.gstRate = val;
+    }
+  }
+  if(CURRENT_USER_ID){
+    const u = STATE.users.find(x=>x.id===CURRENT_USER_ID);
+    if(u) u.role = STATE.settings.role;
+  }
+  persist();
+  showCheck(t('saved'));
+  setTimeout(()=> navigate('profile'), 250);
+}
+
+function doBackup(){
+  const data = JSON.stringify(STATE, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'ledgerloop-backup-'+todayStr()+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  showToast(LANG==='ta'?'காப்பு பதிவிறக்கப்பட்டது':'Backup file downloaded');
+}
+function doRestore(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      STATE.settings = data.settings || STATE.settings;
+      STATE.transactions = data.transactions || [];
+      STATE.credits = data.credits || [];
+      STATE.payments = data.payments || [];
+      persist();
+      showToast(LANG==='ta'?'தரவு மீட்டமைக்கப்பட்டது':'Data restored successfully');
+      render();
+    }catch(err){ showToast(LANG==='ta'?'கோப்பு படிக்க முடியவில்லை':'Could not read backup file'); }
+  };
+  reader.readAsText(file);
+}
+function shareClosing(){
+  const tx = todaysTx();
+  const inc = sumBy(tx,'in'), exp = sumBy(tx,'out');
+  const gstLine = STATE.settings.gstRate>0 ? `\n${t('gstCollected')}: ${fmtMoney(tx.filter(x=>x.type==='in').reduce((s,x)=> s + gstBreakup(x.amount).gst, 0))}` : '';
+  const msg = `*${STATE.settings.businessName}*\n${t('today')}: ${new Date().toLocaleDateString()}\n\n${t('income')}: ${fmtMoney(inc)}\n${t('expense')}: ${fmtMoney(exp)}\n${t('profit')}: ${fmtMoney(inc-exp)}\n${t('pending')}: ${fmtMoney(pendingCreditTotal())}${gstLine}`;
+  const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+}
+function exportCsv(){
+  const tx = rangeTx();
+  const gstOn = STATE.settings.gstRate>0;
+  let csv = gstOn ? 'Date,Time,Type,Category,Person,Amount,Taxable Value,GST Amount,Notes\n' : 'Date,Time,Type,Category,Person,Amount,Notes\n';
+  tx.forEach(x=>{
+    const row = [x.date,x.time||'',x.type,x.category,x.person||'',x.amount];
+    if(gstOn){ const g = gstBreakup(x.amount); row.push(g.taxable.toFixed(2), g.gst.toFixed(2)); }
+    row.push((x.notes||'').replace(/,/g,';'));
+    csv += row.join(',')+'\n';
+  });
+  const blob = new Blob([csv], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'transactions-'+REPORT_RANGE+'.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  showToast(LANG==='ta'?'CSV பதிவிறக்கப்பட்டது':'CSV downloaded');
+}
+
+function sendReminder(creditId){
+  const c = STATE.credits.find(cr=>cr.id===creditId);
+  if(!c) return;
+  const rem = Number(c.amount) - creditPaidAmount(c.id);
+  const msg = LANG==='ta'
+    ? `வணக்கம் ${c.customer}, ${STATE.settings.businessName} இடம் உங்கள் நிலுவை தொகை ${fmtMoney(rem)}. தயவுசெய்து விரைவில் செலுத்தவும். நன்றி!`
+    : `Hi ${c.customer}, this is a reminder from ${STATE.settings.businessName} that ${fmtMoney(rem)} is pending. Please settle it at your earliest convenience. Thank you!`;
+  const phoneClean = (c.phone||'').replace(/[^0-9]/g,'');
+  const url = 'https://wa.me/' + phoneClean + '?text=' + encodeURIComponent(msg);
+  window.open(url, '_blank');
+}
+
+function exportDailyClosingPdf(){
+  if(!window.jspdf || !window.jspdf.jsPDF){ showToast('PDF library not available, try again in a moment'); return; }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const tx = todaysTx();
+  const inc = sumBy(tx,'in'), exp = sumBy(tx,'out');
+  doc.setFontSize(16);
+  doc.text(STATE.settings.businessName || 'My Shop', 14, 18);
+  doc.setFontSize(10);
+  doc.text(new Date().toLocaleDateString(LANG==='ta'?'ta-IN':'en-IN'), 14, 25);
+  let y = 38;
+  doc.setFontSize(12);
+  doc.text(t('income')+': '+fmtMoney(inc), 14, y); y+=8;
+  doc.text(t('expense')+': '+fmtMoney(exp), 14, y); y+=8;
+  doc.text(t('profit')+': '+fmtMoney(inc-exp), 14, y); y+=8;
+  doc.text(t('pending')+': '+fmtMoney(pendingCreditTotal()), 14, y); y+=8;
+  if(STATE.settings.gstRate>0){
+    const gstTotal = tx.filter(x=>x.type==='in').reduce((s,x)=> s + gstBreakup(x.amount).gst, 0);
+    doc.text(t('gstCollected')+': '+fmtMoney(gstTotal), 14, y); y+=8;
+  }
+  y+=6;
+  doc.setFontSize(11);
+  doc.text(t('transactions')+':', 14, y); y+=8;
+  doc.setFontSize(9);
+  if(!tx.length){ doc.text('—', 14, y); }
+  tx.forEach(x=>{
+    if(y>280){ doc.addPage(); y=20; }
+    const line = (x.time||'')+'  '+x.category+(x.person? ' ('+x.person+')':'')+'  '+(x.type==='in'?'+':'-')+fmtMoney(x.amount);
+    doc.text(line, 14, y);
+    y+=6;
+  });
+  doc.save('daily-closing-'+todayStr()+'.pdf');
+  showToast(LANG==='ta'?'PDF பதிவிறக்கப்பட்டது':'PDF downloaded');
+}
+
+function toggleNotifications(){
+  if(STATE.settings.notifOptIn){
+    STATE.settings.notifOptIn = false;
+    persist(); render();
+    return;
+  }
+  if(!('Notification' in window)){ showToast(t('notifBlocked')); return; }
+  Notification.requestPermission().then(perm=>{
+    if(perm==='granted'){
+      STATE.settings.notifOptIn = true;
+      persist(); render();
+      try{ new Notification(STATE.settings.businessName || 'LedgerLoop', {body: t('notifOn')}); }catch(e){}
+    } else {
+      showToast(t('notifBlocked'));
+    }
+  }).catch(()=> showToast(t('notifBlocked')));
+}
+
+function handleSaveRecurring(){
+  const amt = parseFloat(RECUR_FORM.amount);
+  if(!RECUR_FORM.label.trim()){ showToast(LANG==='ta'?'லேபிளை உள்ளிடவும்':'Please enter a label'); return; }
+  if(!(amt>0)){ showToast(LANG==='ta'?'சரியான தொகையை உள்ளிடவும்':'Please enter a valid amount'); return; }
+  if(!RECUR_FORM.category){ showToast(LANG==='ta'?'வகையைத் தேர்ந்தெடுக்கவும்':'Please select a category'); return; }
+  STATE.recurring.push({
+    id: uid(), type: RECUR_FORM.type, label: RECUR_FORM.label.trim(), category: RECUR_FORM.category,
+    amount: amt, frequency: RECUR_FORM.frequency, lastAddedPeriod: null
+  });
+  persist();
+  showCheck(t('saved'));
+  setTimeout(()=> navigate('home'), 250);
+}
+
+function handleAddRecurringNow(id){
+  const r = STATE.recurring.find(x=>x.id===id);
+  if(!r) return;
+  const now = new Date();
+  STATE.transactions.push({
+    id: uid(), type:r.type, amount:r.amount, category:r.category, person:'', notes: r.label,
+    date: now.toISOString().slice(0,10), time: now.toLocaleTimeString(LANG==='ta'?'ta-IN':'en-IN',{hour:'2-digit',minute:'2-digit'}), ts: now.getTime(), photo:null
+  });
+  r.lastAddedPeriod = currentPeriodKey(r.frequency);
+  persist();
+  showCheck(t('saved'));
+  render();
+}
+
+/* ---------- Voice input (Web Speech API, best-effort) ---------- */
+function tryVoiceInput(onResult){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ showToast('Voice input not supported on this browser'); return; }
+  const rec = new SR();
+  rec.lang = LANG==='ta' ? 'ta-IN' : 'en-IN';
+  let handled = false;
+  rec.onresult = (e)=>{ handled = true; onResult(e.results[0][0].transcript); };
+  rec.onerror = ()=>{ handled = true; showToast('Voice input failed, please type instead'); onResult(''); };
+  rec.onend = ()=>{ if(!handled) onResult(''); };
+  rec.start();
+}
+
+/* ---------- Init ---------- */
+if(!STATE.transactions.length && !localStorage.getItem('ll_seeded')){
+  // seed with a couple of friendly sample entries so first-run isn't empty
+  localStorage.setItem('ll_seeded','1');
+}
+render();
+
+/* ---------- PWA: register service worker (enables install + offline use) ---------- */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{ /* offline install not available, app still works normally */ });
+  });
+}
+</script>
+</body>
+</html>
